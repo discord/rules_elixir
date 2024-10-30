@@ -11,6 +11,7 @@ def elixir_app(
         elixirc_opts = [],
         ez_deps = [],
         deps = [],
+        priv = [],
         **kwargs):
     """compiles elixir sources in a manner compatible with @rules_erlang
 
@@ -73,7 +74,7 @@ def elixir_app(
         beam = [":ebin"],
         extra_apps = extra_apps,
         license_files = native.glob(["LICENSE*"]),
-        priv = [],
+        priv = priv,
         visibility = ["//visibility:public"],
         deps = [
             ":elixir_without_app_overlap",
