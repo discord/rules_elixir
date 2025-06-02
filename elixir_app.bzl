@@ -12,6 +12,7 @@ def elixir_app(
         ez_deps = [],
         deps = [],
         priv = [],
+        license_files = [],
         **kwargs):
     """compiles elixir sources in a manner compatible with @rules_erlang
 
@@ -73,7 +74,7 @@ def elixir_app(
         app_name = app_name,
         beam = [":ebin"],
         extra_apps = extra_apps,
-        license_files = native.glob(["LICENSE*"]),
+        license_files = license_files,
         priv = priv,
         visibility = ["//visibility:public"],
         deps = [
