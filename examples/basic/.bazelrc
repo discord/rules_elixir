@@ -3,5 +3,5 @@ build --registry=https://raw.githubusercontent.com/rabbitmq/bazel-central-regist
 
 build --incompatible_strict_action_env
 
-build --bes_results_url=https://app.buildbuddy.io/invocation/
-build --bes_backend=grpcs://remote.buildbuddy.io
+# build --bes_results_url=https://app.buildbuddy.io/invocation/
+# build --bes_backend=grpcs://remote.buildbuddy.io
