@@ -21,7 +21,9 @@ def _mix_library_impl(ctx):
     # TODO: i don't _think_ we need to explicitly pass the output dir in, and
     # should instead return a Provider that can provide erlang...library info?
     # TBD
+    # This also needs a better name
     ebin = ctx.actions.declare_directory("ebin")
+    # app_file = ctx.actions.declare_file("{app_name}.app".format(app_name=ctx.attr.app_name))
 
     erl_libs_dir = ctx.label.name + "_deps"
 
@@ -58,6 +60,8 @@ def _mix_library_impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
+    all_deps = flat_deps(ctx.attr.deps)
+
     script = """set -euo pipefail
 
 {maybe_install_erlang}
@@ -71,7 +75,8 @@ export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 set +x
 
 export MIX_OFFLINE=true
-export MIX_BUILD_PATH="{out_dir}"
+mkdir _output
+export MIX_BUILD_ROOT=_output
 
 cd "{build_dir}"
 
@@ -84,14 +89,19 @@ MIX_ENV=prod \\
     ERL_LIBS="{erl_libs_path}" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation
 
-# ls -lR _build
+# ls -laR .
+
+mkdir -p {ebin_dir}/ebin/lib/{app_name}/ebin
+cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_name}/ebin/
 
 # TODO: where can i get the `main` name from here?
 # TODO: confirm output layout of end dir
-# ls -laR {out_dir}
 # mv _build/ebin/lib/main/* {out_dir}/
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
+        app_name = ctx.attr.app_name,
+        # app_file_out = app_file.path,
+        ebin_dir = ebin.path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
@@ -125,12 +135,44 @@ MIX_ENV=prod \\
             files = depset([ebin])
         ),
         MixProjectInfo(
-            ebin = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'ebin']),
+            # app_name = ctx.attr.app_name,
+            mix_config = ctx.file.mix_config,
+            # ebin = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'ebin']),
             # TODO: should we actually keep this, or should be just YEET the
             # consolidated directory? it seems only have dependencies
             # (maybe we can just skip consolidation entirely??)
-            consolidated = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'consolidated']),
+            # consolidated = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'consolidated']),
+
+            # TODO: which of these approaches do we want to take here?
+            #  1. we only keep the compiled BEAM files for _this_ library, and
+            #    then combine _all_ dependencies in the `mix release` step
+            #  2. we keep all BEAM files of all modules this depends on in the
+            #    output, which will lead to bigger targets, but also means we
+            #    might not have to carry the dep
+
+            # i..._think_ we want to do 2 here -> need to confirm what gets
+            # consolidated and what does not
+
+            # TODO: this needs to maintain the full set of dependent libraries
+            # needed to build this, if we want to avoid 
+            # deps = [ ],
         ),
+        ErlangAppInfo(
+            app_name = ctx.attr.app_name,
+            # direct_deps = ctx.attr.deps,
+            deps = all_deps,
+            srcs = ctx.attr.srcs,
+            # TODO: beam?
+            beam = ebin,
+            # TODO: this is where we'll provide some of the weirder assets,
+            # like .so files for NIFs.
+            priv = None,
+            # TODO: extra erlang libs to include?
+            include = [],
+            license_files = [],
+            # I...don't think we use these here?
+            extra_apps = [],
+        )
     ]
 
 
