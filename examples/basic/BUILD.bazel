@@ -2,7 +2,7 @@ load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
-load("@rules_elixir//:defs.bzl", "mix_library")
+load("@rules_elixir//:defs.bzl", "mix_library", "mix_binary")
 
 mix_library(
     name = "basic",
@@ -11,6 +11,11 @@ mix_library(
     app_name = "main",
     mix_config = ":mix.exs",
     srcs = glob(['lib/**/*.ex']),
+)
+
+mix_binary(
+    name = "basic-bin",
+    application = ":basic",
 )
 
 # elixir_app(
