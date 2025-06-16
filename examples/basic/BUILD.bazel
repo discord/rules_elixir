@@ -2,7 +2,7 @@ load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
-load("@rules_elixir//:defs.bzl", "mix_library", "mix_binary")
+load("@rules_elixir//:defs.bzl", "mix_library", "mix_release")
 
 mix_library(
     name = "basic",
@@ -13,10 +13,24 @@ mix_library(
     srcs = glob(['lib/**/*.ex']),
 )
 
-mix_binary(
-    name = "basic-bin",
+mix_release(
+    name = "basic-release",
     application = ":basic",
 )
+
+# TODO: this is what we want mix_binary to look like, when mix_release has
+# been built separately (for whatever reason)
+# mix_binary(
+#     name = "basic-bin",
+#     release = ":basic-release",
+# )
+
+# Otherwise, we should still be able to construct this without _explicitly_
+# defining a mix_release. maybe this just becomes a macro?
+# mix_binary(
+#     name = "basic-bin",
+#     application = ":basic",
+# )
 
 # elixir_app(
 #     app_name = "basic",
