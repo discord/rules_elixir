@@ -22,7 +22,7 @@ def _mix_library_impl(ctx):
     # should instead return a Provider that can provide erlang...library info?
     # TBD
     # This also needs a better name
-    ebin = ctx.actions.declare_directory("ebin")
+    ebin = ctx.actions.declare_directory(ctx.attr.app_name)
     # app_file = ctx.actions.declare_file("{app_name}.app".format(app_name=ctx.attr.app_name))
 
     erl_libs_dir = ctx.label.name + "_deps"
@@ -74,29 +74,24 @@ export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
 set +x
 
-export MIX_OFFLINE=true
-mkdir _output
-export MIX_BUILD_ROOT=_output
-
 cd "{build_dir}"
+
+mkdir -p _output {ebin_dir}/ebin
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
 
 MIX_ENV=prod \\
+    MIX_OFFLINE=true \\
+    MIX_BUILD_ROOT=_output \\
+    MIX_DEBUG=1 \\
     MIX_HOME=/tmp \\
-    ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
-    ERL_LIBS="{erl_libs_path}" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation
+    HOME=/tmp \\
+    ELIXIR_ERL_OPTIONS="+fnu -pa {erl_libs_path}" \\
+    ERL_LIBS="{erl_libs_path}:/nix/store/fqq4ziv56imvijg01avwm79chlsjir3k-elixir-1.15.5/lib/elixir/lib" \\
+    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
 
-# ls -laR .
-
-mkdir -p {ebin_dir}/ebin/lib/{app_name}/ebin
-cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_name}/ebin/
-
-# TODO: where can i get the `main` name from here?
-# TODO: confirm output layout of end dir
-# mv _build/ebin/lib/main/* {out_dir}/
+cp -r _output/prod/lib/{app_name}/ebin/*.{{app,beam}} {ebin_dir}/ebin/
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
@@ -185,7 +180,10 @@ mix_library = rule(
             default = ":mix.exs",
         ),
         "srcs": attr.label_list(
-            allow_files = [".ex"],
+            # NOTE: do not specifically require .ex here, because it's common
+            # for people to embed into their compilation (e.g., w/ README.md)
+            # allow_files = [".ex"],
+            allow_files = True,
         ),
         "deps": attr.label_list(
             # TODO: need to confirm the provider we create also outputs this
