@@ -74,9 +74,10 @@ export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
 set +x
 
-cd "{build_dir}"
+pushd "{build_dir}"
 
-mkdir -p _output {ebin_dir}/ebin
+# This structure is expected by rules_erlang
+mkdir -p _output {out_dir}
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
@@ -85,18 +86,26 @@ MIX_ENV=prod \\
     MIX_OFFLINE=true \\
     MIX_BUILD_ROOT=_output \\
     MIX_DEBUG=1 \\
+    MIX_DEPS_PATH="{erl_libs_path}" \\
     MIX_HOME=/tmp \\
     HOME=/tmp \\
     ELIXIR_ERL_OPTIONS="+fnu -pa {erl_libs_path}" \\
     ERL_LIBS="{erl_libs_path}:/nix/store/fqq4ziv56imvijg01avwm79chlsjir3k-elixir-1.15.5/lib/elixir/lib" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
 
-cp -r _output/prod/lib/{app_name}/ebin/*.{{app,beam}} {ebin_dir}/ebin/
+popd
+
+echo {out_dir}
+ls -l {out_dir}
+cp -v {build_dir}/_output/prod/lib/{app_name}/ebin/*.{{app,beam}} {out_dir}/
+echo {out_dir}
+find {out_dir} -name '*.beam'
+# ls -lR {out_dir}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
         # app_file_out = app_file.path,
-        ebin_dir = ebin.path,
+        out_dir = ebin.path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
@@ -104,7 +113,6 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{app,beam}} {ebin_dir}/ebin/
         name = ctx.label.name,
         # env = env,
         # setup = ctx.attr.setup,
-        out_dir = ebin.path,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
@@ -158,10 +166,10 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{app,beam}} {ebin_dir}/ebin/
             deps = all_deps,
             srcs = ctx.attr.srcs,
             # TODO: beam?
-            beam = ebin,
+            beam = [ebin],
             # TODO: this is where we'll provide some of the weirder assets,
             # like .so files for NIFs.
-            priv = None,
+            priv = [],
             # TODO: extra erlang libs to include?
             include = [],
             license_files = [],
