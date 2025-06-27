@@ -37,6 +37,14 @@ def _mix_library_impl(ctx):
         expand_ezs = True,
     )
 
+    hex_paths = []
+    for file in ctx.attr._hex_pm.files.to_list():
+        # NOTE: this currently depends on Hex being one single module, else
+        # building our classpath string later in the script will fail
+        p = file.dirname
+        if p not in hex_paths:
+            hex_paths.append(p)
+
     # TODO:
     #  - confirm these are all as we expect
     #  - confirm if we need a secondary one of these for non-runtime deps
@@ -74,10 +82,40 @@ export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
 set +x
 
-pushd "{build_dir}"
+# We need to have Hex on the path in many cases.
 
-# This structure is expected by rules_erlang
-mkdir -p _output {out_dir}
+# I might hear you say "Denbeigh, Denbeigh, we can't even use Hex here! Not
+# only do we explicitly provide all dependencies with Bazel, but we explicitly
+# prohibit online access by setting MIX_OFFLINE! Hex can't possibly do anything
+# useful here."
+
+# However, Mix will explicitly checks that all DECLARED deps are present,
+# not just ones that are required to build in this configuration, even if
+# --no-deps-check and --no-optional-deps is set.
+
+# If these are not present, and Hex is not present, Mix will throw early,
+# claiming that Hex is required to fetch dependencies.
+
+# Having Hex (the module) loaded in offline mode alleviates this problem.
+
+ABS_HEX_DIR="$PWD/{hex_ebin}"
+
+ABS_LIBS_PATH=""
+# TODO: confirm if this is _exactly_ what we want/need - i _think_ we can make
+# this a lot simpler now that we've sorted our our srcs assertions.
+if [[ ! -z "{erl_libs_path}" ]]
+then
+    ABS_LIBS_PATH="$(echo "$PWD/{erl_libs_path}" | tr ':' '\n' | xargs -I ^^^ find ^^^ -type d -name "ebin" -exec dirname {{}} ';' 2>/dev/null | tr '\n' ':' | sed 's/:$//')"
+fi
+
+pushd "{build_dir}" >/dev/null
+if [[ -z "{srcs}" ]]
+then
+    echo "srcs are empty - did you forget to add any?" >&2
+    exit 1
+fi
+
+mkdir -p _output
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
@@ -85,35 +123,27 @@ mkdir -p _output {out_dir}
 MIX_ENV=prod \\
     MIX_OFFLINE=true \\
     MIX_BUILD_ROOT=_output \\
-    MIX_DEBUG=1 \\
-    MIX_DEPS_PATH="{erl_libs_path}" \\
+    MIX_DEBUG=0 \\
+    MIX_DEPS_PATH="$ABS_LIBS_PATH:$ABS_HEX_DIR" \\
     MIX_HOME=/tmp \\
     HOME=/tmp \\
-    ELIXIR_ERL_OPTIONS="+fnu -pa {erl_libs_path}" \\
-    ERL_LIBS="{erl_libs_path}:/nix/store/fqq4ziv56imvijg01avwm79chlsjir3k-elixir-1.15.5/lib/elixir/lib" \\
+    ELIXIR_ERL_OPTIONS="+fnu -pa $ABS_LIBS_PATH/ebin $ABS_HEX_DIR" \\
+    ERL_LIBS="${{ABS_LIBS_PATH}}:/nix/store/fqq4ziv56imvijg01avwm79chlsjir3k-elixir-1.15.5/lib/elixir/lib" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
 
-popd
+popd >/dev/null
 
-echo {out_dir}
-ls -l {out_dir}
-cp -v {build_dir}/_output/prod/lib/{app_name}/ebin/*.{{app,beam}} {out_dir}/
-echo {out_dir}
-find {out_dir} -name '*.beam'
-# ls -lR {out_dir}
+cp {build_dir}/_output/prod/lib/{app_name}/ebin/*.{{app,beam}} {out_dir}/
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
-        # app_file_out = app_file.path,
+        hex_ebin = " ".join(hex_paths),
         out_dir = ebin.path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
-        # env = env,
-        # setup = ctx.attr.setup,
-        # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
 
@@ -122,6 +152,7 @@ find {out_dir} -name '*.beam'
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
+            ctx.attr._hex_pm.files,
         ],
     )
 
@@ -201,6 +232,7 @@ mix_library = rule(
         "ez_deps": attr.label_list(
             allow_files = [".ez"],
         ),
+        "_hex_pm": attr.label(default = "@hex_built//:beam_files"),
     },
     # TODO: confirm(??)
     toolchains = ["//:toolchain_type"],
