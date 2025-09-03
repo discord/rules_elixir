@@ -4,6 +4,10 @@ load(
     "INSTALLATION_TYPE_INTERNAL",
     _elixir_config_rule = "elixir_config",
 )
+load(
+    "@bazel_tools//tools/build_defs/repo:http.bzl",
+    "http_archive",
+)
 
 DEFAULT_ELIXIR_VERSION = "1.15.0"
 DEFAULT_ELIXIR_SHA256 = "0f4df7574a5f300b5c66f54906222cd46dac0df7233ded165bc8e80fd9ffeb7a"
@@ -29,6 +33,23 @@ def _elixir_config(ctx):
             strip_prefixs[elixir.name] = elixir.strip_prefix
             sha256s[elixir.name] = elixir.sha256
 
+            # Create repository for downloading and building Elixir source
+            http_archive(
+                name = "elixir_source_{}".format(elixir.name),
+                url = elixir.url,
+                sha256 = elixir.sha256,
+                strip_prefix = elixir.strip_prefix,
+                build_file_content = """
+load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
+
+elixir_build(
+    name = "elixir_build",
+    srcs = glob(["**/*"]),
+    visibility = ["//visibility:public"],
+)
+""",
+            )
+
         for elixir in mod.tags.internal_elixir_from_github_release:
             url = "https://github.com/elixir-lang/elixir/archive/refs/tags/v{}.tar.gz".format(
                 elixir.version,
@@ -40,6 +61,23 @@ def _elixir_config(ctx):
             urls[elixir.name] = url
             strip_prefixs[elixir.name] = strip_prefix
             sha256s[elixir.name] = elixir.sha256
+
+            # Create repository for downloading and building Elixir source
+            http_archive(
+                name = "elixir_source_{}".format(elixir.name),
+                url = url,
+                sha256 = elixir.sha256,
+                strip_prefix = strip_prefix,
+                build_file_content = """
+load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
+
+elixir_build(
+    name = "elixir_build",
+    srcs = glob(["**/*"]),
+    visibility = ["//visibility:public"],
+)
+""",
+            )
 
     _elixir_config_rule(
         name = "elixir_config",

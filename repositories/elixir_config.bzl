@@ -58,6 +58,7 @@ def _impl(repository_ctx):
                     "%{STRIP_PREFIX}": props.strip_prefix or "",
                     "%{SHA_256}": props.sha256 or "",
                     "%{ELIXIR_VERSION_ID}": props.identifier,
+                    "%{ELIXIR_NAME}": name,
                 },
                 False,
             )
