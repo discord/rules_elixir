@@ -111,9 +111,7 @@ export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
 set +x
 
-export MIX_OFFLINE=true
 mkdir _output
-export MIX_BUILD_ROOT=_output
 export HOME=/tmp
 
 
@@ -121,12 +119,6 @@ export HOME=/tmp
 ORIG_PWD="$PWD"
 
 cd "{build_dir}"
-# TAR_PATH="$(realpath {vendored_deps_tar})"
-# # Extract vendored dependencies to satisfy Mix's SCM validation
-# mkdir -p "deps"
-# cd deps
-# tar -xf "{vendored_deps_tar}"
-# cd ..
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
@@ -153,15 +145,21 @@ if [ -n "{mix_archives_path}" ]; then
 fi
 
 MIX_ENV=prod \\
+    MIX_BUILD_ROOT=_output \\
     MIX_HOME=/tmp \\
+    MIX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
     ERL_LIBS="{erl_libs_path}" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
 
 # ls -laR .
 
-mkdir -p {ebin_dir}/ebin/lib/{app_name}/ebin
-cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_name}/ebin/
+mkdir -p {out_dir}/lib/{app_name}/ebin
+# NOTE: this directory can contain files other than .app and .beam, but we only
+# want to keep these in our build output.
+cp -rv _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {out_dir}/lib/{app_name}/ebin/
+
+find {out_dir} -name "*.beam" -or -name "*.app" -exec file \\;
 
 # TODO: where can i get the `main` name from here?
 # TODO: confirm output layout of end dir
@@ -170,7 +168,6 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_n
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
         # app_file_out = app_file.path,
-        ebin_dir = ebin.path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
@@ -182,11 +179,10 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_n
         out_dir = ebin.path,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
-        vendored_deps_tar = ctx.file._vendored_deps.path,
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.data + erl_libs_files + ez_archives_files + [ctx.file.mix_config, ctx.file._vendored_deps],
+        direct = ctx.files.srcs + ctx.files.data + erl_libs_files + ez_archives_files + [ctx.file.mix_config],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -234,10 +230,10 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_n
             deps = all_deps,
             srcs = ctx.attr.srcs,
             # TODO: beam?
-            beam = ebin,
+            beam = [ebin],
             # TODO: this is where we'll provide some of the weirder assets,
             # like .so files for NIFs.
-            priv = None,
+            priv = [],
             # TODO: extra erlang libs to include?
             include = [],
             license_files = [],
@@ -265,15 +261,15 @@ mix_library = rule(
             # TODO: need to confirm the provider we create also outputs this
             providers = [ErlangAppInfo],
         ),
-        # TODO: ez_deps???
+        # TODO: we should probably set a default for this?
         "ez_deps": attr.label_list(
             allow_files = [".ez"],
         ),
-        "_vendored_deps": attr.label(
-            default = "@rules_elixir//private:vendored_elixir_deps_src.tar.gz",
-            allow_single_file = True,
-        ),
+        # "_vendored_deps": attr.label(
+        #     default = "@rules_elixir//private:vendored_elixir_deps_src.tar.gz",
+        #     allow_single_file = True,
+        # ),
     },
-    # TODO: confirm(??)
+    # TODO: confirm(??) (????)
     toolchains = ["//:toolchain_type"],
 )
