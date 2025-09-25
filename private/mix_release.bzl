@@ -27,9 +27,8 @@ def _mix_release_impl(ctx):
         # TODO: direct_deps seems defined only in an unreleased version of
         # rules_erlang
         deps = erlang_info.deps,
-        # ez_deps = ctx.files.ez_deps,
-        ez_deps = [],
-        expand_ezs = True,
+        ez_deps = ctx.files._hex_ez,
+        expand_ezs = False,
     )
 
     erl_libs_path = ""
@@ -46,7 +45,7 @@ def _mix_release_impl(ctx):
     app_config_file = ctx.attr.application[MixProjectInfo].mix_config
     files = [app_config_file]
     if erlang_info.beam:
-        files.append(erlang_info.beam)
+        files.extend(erlang_info.beam)
     runfiles = ctx.runfiles(files = files)
 
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
@@ -63,6 +62,8 @@ else
 fi
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
+ERL_LIBS_PATH="$(realpath {erl_libs_path})"
+
 set -x
 cd {build_dir}
 
@@ -75,14 +76,14 @@ export MIX_OS_CONCURRENCY_LOCK=false
 export MIX_OFFLINE=true
 
 MIX_ENV=prod \\
+    HOME=/tmp \\
     MIX_HOME=/tmp \\
-    ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
-    ERL_LIBS="{beam_files}/ebin/ebin/lib/main:{erl_libs_path}" \\
+    ELIXIR_ERL_OPTIONS="-pa $ERL_LIBS_PATH" \\
+    ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check
 
 mv _build/prod/rel/{app_name} {output_file}
 """.format(
-        beam_files = erlang_info.beam.dirname,
         maybe_install_erlang = maybe_install_erlang(ctx),
         elixir_home = elixir_home,
         erlang_home = erlang_home,
@@ -96,7 +97,7 @@ mv _build/prod/rel/{app_name} {output_file}
 
     # TODO: need to make this uh, better and less cargo-culty
     inputs = depset(
-        direct = files,
+        direct = files + erl_libs_files,
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files
@@ -142,6 +143,10 @@ mix_release = rule(
         "_template": attr.label(
             default = ":run_mix.tpl.sh",
             allow_single_file = True,
+        ),
+        "_hex_ez": attr.label(
+            default = "@rules_elixir//private:hex-2.2.3-dev.ez",
+            allow_files = [".ez"],
         ),
     },
     # TODO: demystify

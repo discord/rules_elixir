@@ -33,40 +33,14 @@ def _mix_library_impl(ctx):
         headers = True,
         dir = erl_libs_dir,
         deps = flat_deps(ctx.attr.deps),
-        ez_deps = ctx.files.ez_deps,
-        expand_ezs = True,
+        # NOTE: even though we provide `ez_deps` here, these don't actually
+        # correctly get added to our necessary include path. We explicitly set
+        # MIX_ARCHIVES later to placate mix here.
+        # TODO: improve this? it would be nice if we didn't have to do
+        # explicit further handling for .ez files.
+        ez_deps = ctx.files.ez_deps + ctx.files._hex_ez,
+        expand_ezs = False,
     )
-
-    # Handle ez_deps by creating a directory with all .ez files
-    ez_archives_dir = None
-    ez_archives_files = []
-    if ctx.files.ez_deps:
-        ez_archives_dir = ctx.actions.declare_directory(ctx.label.name + "_ez_archives")
-
-        # Create a script to copy all .ez files to the archives directory
-        ez_copy_commands = []
-        for ez_file in ctx.files.ez_deps:
-            ez_copy_commands.append("cp {} {}/{}".format(
-                shell.quote(ez_file.path),
-                shell.quote(ez_archives_dir.path),
-                shell.quote(ez_file.basename)
-            ))
-
-        ez_archives_script = """set -euo pipefail
-mkdir -p {dir}
-{copy_commands}
-""".format(
-            dir = shell.quote(ez_archives_dir.path),
-            copy_commands = "\n".join(ez_copy_commands)
-        )
-
-        ctx.actions.run_shell(
-            inputs = ctx.files.ez_deps,
-            outputs = [ez_archives_dir],
-            command = ez_archives_script,
-            mnemonic = "COPYEZARCHIVES",
-        )
-        ez_archives_files = [ez_archives_dir]
 
     # TODO:
     #  - confirm these are all as we expect
@@ -80,12 +54,6 @@ mkdir -p {dir}
             ctx.label.package,
             erl_libs_dir,
         )
-
-    # Set MIX_ARCHIVES environment variable if we have ez_deps
-    mix_archives_path = ""
-    if ez_archives_dir:
-        # Use the actual path of the directory that will exist during execution
-        mix_archives_path = ez_archives_dir.path
 
     # TODO: do we want to expose env vars here?
     env = ""
@@ -114,52 +82,37 @@ set +x
 mkdir _output
 export HOME=/tmp
 
-
 # Save the original working directory before cd
 ORIG_PWD="$PWD"
+
+ls -laR {erl_libs_path}
+ERL_LIBS_PATH="$(realpath {erl_libs_path})"
 
 cd "{build_dir}"
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
 
-# Set MIX_ARCHIVES if we have ez archives
-if [ -n "{mix_archives_path}" ]; then
-    # Convert to absolute path using the original working directory
-    if [[ "{mix_archives_path}" == /* ]]; then
-        ABS_MIX_ARCHIVES="{mix_archives_path}"
-    else
-        ABS_MIX_ARCHIVES="$ORIG_PWD/{mix_archives_path}"
-    fi
-    echo "Setting MIX_ARCHIVES to: $ABS_MIX_ARCHIVES"
-    if [ -d "$ABS_MIX_ARCHIVES" ]; then
-        echo "MIX_ARCHIVES directory exists with contents:"
-        ls -la "$ABS_MIX_ARCHIVES"
-    else
-        echo "ERROR: MIX_ARCHIVES directory does not exist at $ABS_MIX_ARCHIVES"
-        echo "Current directory: $PWD"
-        echo "Looking for ez archives in:"
-        find . -name "*ez_archives*" -type d 2>/dev/null || true
-    fi
-    export MIX_ARCHIVES="$ABS_MIX_ARCHIVES"
-fi
-
 MIX_ENV=prod \\
     MIX_BUILD_ROOT=_output \\
     MIX_HOME=/tmp \\
     MIX_OFFLINE=true \\
-    ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
-    ERL_LIBS="{erl_libs_path}" \\
+    ELIXIR_ERL_OPTIONS="-pa $ERL_LIBS_PATH" \\
+    ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
 
-# ls -laR .
+# Use absolute path for output directory from original working directory
+if [[ "{out_dir}" == /* ]]; then
+    ABS_OUT_DIR="{out_dir}"
+else
+    ABS_OUT_DIR="$ORIG_PWD/{out_dir}"
+fi
 
-mkdir -p {out_dir}/lib/{app_name}/ebin
+mkdir -p "$ABS_OUT_DIR/lib/{app_name}/ebin"
+
 # NOTE: this directory can contain files other than .app and .beam, but we only
 # want to keep these in our build output.
-cp -rv _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {out_dir}/lib/{app_name}/ebin/
-
-find {out_dir} -name "*.beam" -or -name "*.app" -exec file \\;
+cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/lib/{app_name}/ebin/"
 
 # TODO: where can i get the `main` name from here?
 # TODO: confirm output layout of end dir
@@ -171,7 +124,6 @@ find {out_dir} -name "*.beam" -or -name "*.app" -exec file \\;
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
-        mix_archives_path = mix_archives_path,
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
         # env = env,
@@ -182,7 +134,7 @@ find {out_dir} -name "*.beam" -or -name "*.app" -exec file \\;
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.data + erl_libs_files + ez_archives_files + [ctx.file.mix_config],
+        direct = ctx.files.srcs + ctx.files.data + erl_libs_files + [ctx.file.mix_config],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -263,6 +215,10 @@ mix_library = rule(
         ),
         # TODO: we should probably set a default for this?
         "ez_deps": attr.label_list(
+            allow_files = [".ez"],
+        ),
+        "_hex_ez": attr.label(
+            default = "@rules_elixir//private:hex-2.2.3-dev.ez",
             allow_files = [".ez"],
         ),
         # "_vendored_deps": attr.label(
