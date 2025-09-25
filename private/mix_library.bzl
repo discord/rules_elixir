@@ -37,6 +37,37 @@ def _mix_library_impl(ctx):
         expand_ezs = True,
     )
 
+    # Handle ez_deps by creating a directory with all .ez files
+    ez_archives_dir = None
+    ez_archives_files = []
+    if ctx.files.ez_deps:
+        ez_archives_dir = ctx.actions.declare_directory(ctx.label.name + "_ez_archives")
+
+        # Create a script to copy all .ez files to the archives directory
+        ez_copy_commands = []
+        for ez_file in ctx.files.ez_deps:
+            ez_copy_commands.append("cp {} {}/{}".format(
+                shell.quote(ez_file.path),
+                shell.quote(ez_archives_dir.path),
+                shell.quote(ez_file.basename)
+            ))
+
+        ez_archives_script = """set -euo pipefail
+mkdir -p {dir}
+{copy_commands}
+""".format(
+            dir = shell.quote(ez_archives_dir.path),
+            copy_commands = "\n".join(ez_copy_commands)
+        )
+
+        ctx.actions.run_shell(
+            inputs = ctx.files.ez_deps,
+            outputs = [ez_archives_dir],
+            command = ez_archives_script,
+            mnemonic = "COPYEZARCHIVES",
+        )
+        ez_archives_files = [ez_archives_dir]
+
     # TODO:
     #  - confirm these are all as we expect
     #  - confirm if we need a secondary one of these for non-runtime deps
@@ -49,6 +80,12 @@ def _mix_library_impl(ctx):
             ctx.label.package,
             erl_libs_dir,
         )
+
+    # Set MIX_ARCHIVES environment variable if we have ez_deps
+    mix_archives_path = ""
+    if ez_archives_dir:
+        # Use the actual path of the directory that will exist during execution
+        mix_archives_path = ez_archives_dir.path
 
     # TODO: do we want to expose env vars here?
     env = ""
@@ -77,17 +114,49 @@ set +x
 export MIX_OFFLINE=true
 mkdir _output
 export MIX_BUILD_ROOT=_output
+export HOME=/tmp
+
+
+# Save the original working directory before cd
+ORIG_PWD="$PWD"
 
 cd "{build_dir}"
+# TAR_PATH="$(realpath {vendored_deps_tar})"
+# # Extract vendored dependencies to satisfy Mix's SCM validation
+# mkdir -p "deps"
+# cd deps
+# tar -xf "{vendored_deps_tar}"
+# cd ..
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
+
+# Set MIX_ARCHIVES if we have ez archives
+if [ -n "{mix_archives_path}" ]; then
+    # Convert to absolute path using the original working directory
+    if [[ "{mix_archives_path}" == /* ]]; then
+        ABS_MIX_ARCHIVES="{mix_archives_path}"
+    else
+        ABS_MIX_ARCHIVES="$ORIG_PWD/{mix_archives_path}"
+    fi
+    echo "Setting MIX_ARCHIVES to: $ABS_MIX_ARCHIVES"
+    if [ -d "$ABS_MIX_ARCHIVES" ]; then
+        echo "MIX_ARCHIVES directory exists with contents:"
+        ls -la "$ABS_MIX_ARCHIVES"
+    else
+        echo "ERROR: MIX_ARCHIVES directory does not exist at $ABS_MIX_ARCHIVES"
+        echo "Current directory: $PWD"
+        echo "Looking for ez archives in:"
+        find . -name "*ez_archives*" -type d 2>/dev/null || true
+    fi
+    export MIX_ARCHIVES="$ABS_MIX_ARCHIVES"
+fi
 
 MIX_ENV=prod \\
     MIX_HOME=/tmp \\
     ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
     ERL_LIBS="{erl_libs_path}" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation
+    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
 
 # ls -laR .
 
@@ -105,6 +174,7 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_n
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
+        mix_archives_path = mix_archives_path,
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
         # env = env,
@@ -112,10 +182,11 @@ cp -r _output/prod/lib/{app_name}/ebin/*.{{beam,app}} {ebin_dir}/ebin/lib/{app_n
         out_dir = ebin.path,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
+        vendored_deps_tar = ctx.file._vendored_deps.path,
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + erl_libs_files + [ctx.file.mix_config],
+        direct = ctx.files.srcs + ctx.files.data + erl_libs_files + ez_archives_files + [ctx.file.mix_config, ctx.file._vendored_deps],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -185,7 +256,10 @@ mix_library = rule(
             default = ":mix.exs",
         ),
         "srcs": attr.label_list(
-            allow_files = [".ex"],
+            allow_files = [".ex", ".erl"],
+        ),
+        "data": attr.label_list(
+            allow_files = True,
         ),
         "deps": attr.label_list(
             # TODO: need to confirm the provider we create also outputs this
@@ -194,6 +268,10 @@ mix_library = rule(
         # TODO: ez_deps???
         "ez_deps": attr.label_list(
             allow_files = [".ez"],
+        ),
+        "_vendored_deps": attr.label(
+            default = "@rules_elixir//private:vendored_elixir_deps_src.tar.gz",
+            allow_single_file = True,
         ),
     },
     # TODO: confirm(??)

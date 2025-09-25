@@ -8,7 +8,6 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
 )
 
 def _mix_binary_impl(ctx):
@@ -17,7 +16,6 @@ def _mix_binary_impl(ctx):
     erl_libs_dir = ctx.label.name + "_deps"
 
     erlang_info = ctx.attr.application[ErlangAppInfo]
-    print(erlang_info)
 
     # NOTE: cargo-culted, needs further understanding
     erl_libs_files = erl_libs_contents(
@@ -57,7 +55,6 @@ def _mix_binary_impl(ctx):
 
     script = """set -euo pipefail
 
-{maybe_install_erlang}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
@@ -76,11 +73,8 @@ export MIX_OS_CONCURRENCY_LOCK=false
 # TODO: we should probably consolidate these somewhere?
 export MIX_OFFLINE=true
 
-# TODO: need to clean this hierarchy up
-ls -laR {beam_files}/ebin/ebin/lib/main
-
 MIX_ENV=prod \\
-    MIX_HOME=/tmp \\
+    MIX_HOME="$(mktemp -d)" \\
     ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
     ERL_LIBS="{beam_files}/ebin/ebin/lib/main:{erl_libs_path}" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check

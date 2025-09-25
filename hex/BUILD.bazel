@@ -1,0 +1,109 @@
+load("@rules_erlang//:erlang_xrl_yrl.bzl", "erlang_xrl_yrl")
+load("@rules_erlang//:erlang_bytecode.bzl", "erlang_bytecode")
+load("@rules_erlang//:app_file2.bzl", "app_file")
+load("@rules_erlang//:erlang_app_info.bzl", "erlang_app_info")
+load("//private:elixir_bytecode.bzl", "elixir_bytecode")
+load("//private:elixir_ebin_dir.bzl", "elixir_ebin_dir")
+load("//private:erlang_app_filter_module_conflicts.bzl", "erlang_app_filter_module_conflicts")
+
+# Step 1: Compile the .xrl file to .erl
+erlang_xrl_yrl(
+    name = "xrl_to_erl",
+    srcs = ["@hex_src//:src/mix_safe_erl_term.xrl"],
+    outs = ["src/mix_safe_erl_term.erl"],
+)
+
+# Step 2: Compile Erlang sources (.erl files)
+erlang_bytecode(
+    name = "erlang_beam_files",
+    srcs = glob(["@hex_src//:src/**/*.erl"]) + [":xrl_to_erl"],
+    hdrs = glob(["@hex_src//:src/**/*.hrl"]),
+    dest = "erlang_ebin",
+    erlc_opts = [
+        "+deterministic",
+        "+debug_info",
+        "+warn_export_vars",
+        "+warn_shadow_vars",
+        "+warn_obsolete_guard",
+    ],
+)
+
+# Step 3: Compile Elixir sources (.ex files)
+elixir_bytecode(
+    name = "elixir_beam_files",
+    srcs = glob(["@hex_src//:lib/**/*.ex"]),
+    dest = "elixir_ebin",
+    elixirc_opts = [
+        "--warnings-as-errors",
+        "--ignore-module-conflict",
+    ],
+    deps = [],
+)
+
+# Step 4: Create the .app file
+app_file(
+    name = "hex_app_file",
+    out = "hex.app",
+    app_name = "hex",
+    app_version = "2.2.3",
+    app_description = "Package manager for the Erlang ecosystem",
+    app_module = "Hex.Application",
+    extra_apps = [
+        "elixir",
+        "ssl",
+        "inets",
+        "logger",
+    ],
+    modules = [
+        ":erlang_beam_files",
+        ":elixir_beam_files",
+    ],
+)
+
+# Step 5: Combine everything into an ebin directory
+genrule(
+    name = "hex_ebin",
+    srcs = [
+        ":erlang_beam_files",
+        ":elixir_beam_files",
+        ":hex_app_file",
+    ],
+    outs = ["ebin"],
+    cmd = """
+        mkdir -p $@
+        # Copy Erlang BEAM files
+        if [ -d $(location :erlang_beam_files) ]; then
+            cp -r $(location :erlang_beam_files)/*.beam $@/ 2>/dev/null || true
+        fi
+        # Copy Elixir BEAM files
+        if [ -d $(location :elixir_beam_files) ]; then
+            cp -r $(location :elixir_beam_files)/*.beam $@/ 2>/dev/null || true
+        fi
+        # Copy app file
+        cp $(location :hex_app_file) $@/
+    """,
+)
+
+# Step 6: Filter out Elixir modules that might conflict
+erlang_app_filter_module_conflicts(
+    name = "elixir_without_app_overlap",
+    dest = "unconsolidated",
+    src = "@rules_elixir//elixir:elixir",
+    without = [":hex_ebin"],
+)
+
+# Step 7: Create the final erlang_app_info provider
+erlang_app_info(
+    name = "hex",
+    app_name = "hex",
+    srcs = glob(["@hex_src//:lib/**/*.ex", "@hex_src//:src/**/*.erl"]),
+    hdrs = glob(["@hex_src//:src/**/*.hrl"]),
+    beam = [":hex_ebin"],
+    extra_apps = [
+        "ssl",
+        "inets",
+        "logger",
+    ],
+    deps = [":elixir_without_app_overlap"],
+    visibility = ["//visibility:public"],
+)

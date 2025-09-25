@@ -15,3 +15,42 @@ local_path_override(
     module_name = "rules_elixir",
     path = "../..",
 )
+
+# Test the elixir_packages extension with a simple package
+elixir_packages = use_extension(
+    "@rules_elixir//bzlmod:extensions.bzl",
+    "elixir_packages",
+)
+elixir_packages.hex_package(
+    name = "earmark_parser",
+    version = "1.4.35",
+    sha256 = "8652ba3cb85608d0d7aa2d21b45c6fad4ddc9a1f9a1f1b30ca3a246f0acc33f6",
+)
+elixir_packages.hex_package(
+    name = "ex_doc",
+    version = "0.30.9",
+    sha256 = "d7aaaf21e95dc5cddabf89063327e96867d00013963eadf2c6ad135506a8bc10",
+)
+elixir_packages.hex_package(
+    name = "decimal",
+    version = "2.1.1",
+    sha256 = "53cfe5f497ed0e7771ae1a475575603d77425099ba5faef9394932b35020ffcc",
+)
+elixir_packages.hex_package(
+    name = "jason",
+    version = "1.4.1",
+    sha256 = "fbb01ecdfd565b56261302f7e1fcc27c4fb8f32d56eab74db621fc154604a7a1",
+)
+elixir_packages.hex_package(
+    name = "plug_crypto",
+    version = "2.1.1",
+    sha256 = "",
+)
+use_repo(
+    elixir_packages,
+    "earmark_parser",
+    "ex_doc",
+    "decimal",
+    "plug_crypto",
+    "jason",
+)

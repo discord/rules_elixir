@@ -24,3 +24,22 @@ use_repo(
 register_toolchains(
     "@elixir_config//external:toolchain",
 )
+
+# Hex package manager as a library dependency
+# This is compiled without mix to avoid circular dependencies
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+local_repository = use_repo_rule("@bazel_tools//tools/build_defs/repo:local.bzl", "local_repository")
+
+http_archive(
+    name = "hex_pm",
+    urls = ["https://github.com/hexpm/hex/archive/refs/tags/v2.2.2.tar.gz"],
+    strip_prefix = "hex-2.2.2",
+    sha256 = "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
+    build_file = "@rules_elixir//:hex.BUILD.bazel",
+)
+
+# Local hex archive for direct use
+local_repository(
+    name = "hex_archive",
+    path = "/home/discord/hex",
+)

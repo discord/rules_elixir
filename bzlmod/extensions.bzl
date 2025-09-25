@@ -8,6 +8,10 @@ load(
     "@bazel_tools//tools/build_defs/repo:http.bzl",
     "http_archive",
 )
+load(
+    "//bzlmod:hex_package.bzl",
+    _elixir_packages = "elixir_packages",
+)
 
 DEFAULT_ELIXIR_VERSION = "1.15.0"
 DEFAULT_ELIXIR_SHA256 = "0f4df7574a5f300b5c66f54906222cd46dac0df7233ded165bc8e80fd9ffeb7a"
@@ -123,3 +127,6 @@ elixir_config = module_extension(
         "internal_elixir_from_github_release": internal_elixir_from_github_release,
     },
 )
+
+# Re-export the elixir_packages extension
+elixir_packages = _elixir_packages
