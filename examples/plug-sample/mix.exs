@@ -7,14 +7,14 @@ defmodule PlugSample.MixProject do
       version: "0.1.0",
       elixir: "~> 1.14",
       start_permanent: Mix.env() == :prod,
-      deps: deps(),
-      escript: [main_module: PlugSample.CLI]
+      deps: deps()
     ]
   end
 
   def application do
     [
-      extra_applications: [:logger]
+      extra_applications: [:logger],
+      mod: {PlugSample.Application, []}
     ]
   end
 

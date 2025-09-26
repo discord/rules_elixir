@@ -12,10 +12,10 @@ load("//private:mix_info.bzl", "MixProjectInfo")
 
 def _elixir_erl_libs_args(paths):
     if not paths:
-        return ''
+        return ""
 
-    lib_dirs = ' '.join(paths)
-    return '-pa ' + lib_dirs
+    lib_dirs = " ".join(paths)
+    return "-pa " + lib_dirs
 
 def _mix_library_impl(ctx):
     # TODO: i don't _think_ we need to explicitly pass the output dir in, and
@@ -144,10 +144,9 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
         mnemonic = "MIXCOMPILE",
     )
 
-
     return [
         DefaultInfo(
-            files = depset([ebin])
+            files = depset([ebin]),
         ),
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
@@ -169,7 +168,7 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
             # consolidated and what does not
 
             # TODO: this needs to maintain the full set of dependent libraries
-            # needed to build this, if we want to avoid 
+            # needed to build this, if we want to avoid
             # deps = [ ],
         ),
         ErlangAppInfo(
@@ -187,9 +186,8 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
             license_files = [],
             # I...don't think we use these here?
             extra_apps = [],
-        )
+        ),
     ]
-
 
 mix_library = rule(
     implementation = _mix_library_impl,

@@ -115,7 +115,6 @@ elixir_build = rule(
     toolchains = ["@rules_erlang//tools:toolchain_type"],
 )
 
-
 def _elixir_external_impl(ctx):
     elixir_home = ctx.attr.elixir_home
     if elixir_home == "":

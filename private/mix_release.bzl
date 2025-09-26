@@ -1,6 +1,6 @@
-load("//private:mix_info.bzl", "MixProjectInfo")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
+
 # TODO: this will eventiuallty break, because we are loading from a directory
 # called private
 load("@rules_erlang//private:util.bzl", "erl_libs_contents")
@@ -10,6 +10,7 @@ load(
     "erlang_dirs",
     "maybe_install_erlang",
 )
+load("//private:mix_info.bzl", "MixProjectInfo")
 
 def _mix_release_impl(ctx):
     # TODO: run mix_release and output this
@@ -39,6 +40,7 @@ def _mix_release_impl(ctx):
             ctx.label.package,
             erl_libs_dir,
         )
+
     # NOTE: end cargo-cult
 
     # this has to be a label, instead of a string
@@ -51,7 +53,7 @@ def _mix_release_impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
-    mix_release_artifacts = ctx.actions.declare_directory('{}_release'.format(ctx.label.name))
+    mix_release_artifacts = ctx.actions.declare_directory("{}_release".format(ctx.label.name))
     script = """set -euo pipefail
 
 {maybe_install_erlang}
@@ -110,13 +112,12 @@ mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
         output_file = mix_release_artifacts.path,
     )
 
-
     # TODO: need to make this uh, better and less cargo-culty
     inputs = depset(
         direct = files + erl_libs_files,
         transitive = [
             erlang_runfiles.files,
-            elixir_runfiles.files
+            elixir_runfiles.files,
         ],
     )
 
@@ -138,6 +139,8 @@ mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
             "{BINARY_PATH}": mix_release_artifacts.short_path,
             "{APP_NAME}": erlang_info.app_name,
             "{TARGET_NAME}": ctx.label.name,
+            "{COMMAND_LINE_ARGS}": " ".join(ctx.attr.command_line_args),
+            "{RUN_ARGUMENT}": ctx.attr.run_argument,
         },
         # deps = [files],
     )
@@ -146,16 +149,15 @@ mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
         DefaultInfo(
             # files = inputs,
             runfiles = ctx.runfiles(files = [mix_release_artifacts]),
-        )
+        ),
     ]
-
 
 mix_release = rule(
     implementation = _mix_release_impl,
     executable = True,
     attrs = {
-        'app_name': attr.string(),
-        'application': attr.label(providers = [MixProjectInfo, ErlangAppInfo]),
+        "app_name": attr.string(),
+        "application": attr.label(providers = [MixProjectInfo, ErlangAppInfo]),
         "_template": attr.label(
             default = ":run_mix.tpl.sh",
             allow_single_file = True,
@@ -164,8 +166,13 @@ mix_release = rule(
             default = "@rules_elixir//private:hex-2.2.3-dev.ez",
             allow_files = [".ez"],
         ),
+        "run_argument": attr.string(
+            default = "start",
+        ),
+        "command_line_args": attr.string_list(
+            default = [],
+        ),
     },
     # TODO: demystify
     toolchains = ["//:toolchain_type"],
 )
-

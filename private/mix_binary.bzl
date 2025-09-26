@@ -1,6 +1,6 @@
-load("//private:mix_info.bzl", "MixProjectInfo")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
+
 # TODO: this will eventiuallty break, because we are loading from a directory
 # called private
 load("@rules_erlang//private:util.bzl", "erl_libs_contents")
@@ -9,6 +9,7 @@ load(
     "elixir_dirs",
     "erlang_dirs",
 )
+load("//private:mix_info.bzl", "MixProjectInfo")
 
 def _mix_binary_impl(ctx):
     # TODO: run mix_release and output this
@@ -39,6 +40,7 @@ def _mix_binary_impl(ctx):
             ctx.label.package,
             erl_libs_dir,
         )
+
     # NOTE: end cargo-cult
 
     # this has to be a label, instead of a string
@@ -99,7 +101,7 @@ mv _build/prod/rel/{app_name}/bin/{app_name} {output_file}
         direct = files,
         transitive = [
             erlang_runfiles.files,
-            elixir_runfiles.files
+            elixir_runfiles.files,
         ],
     )
 
@@ -111,16 +113,15 @@ mv _build/prod/rel/{app_name}/bin/{app_name} {output_file}
     )
 
     return [
-        DefaultInfo(executable = exe)
+        DefaultInfo(executable = exe),
     ]
-
 
 mix_binary = rule(
     implementation = _mix_binary_impl,
     executable = True,
     attrs = {
-        'app_name': attr.string(),
-        'application': attr.label(providers = [MixProjectInfo, ErlangAppInfo]),
+        "app_name": attr.string(),
+        "application": attr.label(providers = [MixProjectInfo, ErlangAppInfo]),
     },
     # TODO: demystify
     toolchains = ["//:toolchain_type"],

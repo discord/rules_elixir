@@ -2,9 +2,9 @@
 
 BIN_PATH="{BINARY_PATH}/{APP_NAME}/bin/{APP_NAME}"
 
-if [[ $# == 0 ]]
+if [[ -n "{COMMAND_LINE_ARGS}" ]]
 then
-    exec "$BIN_PATH" start
+    exec "$BIN_PATH" "{RUN_ARGUMENT}" {COMMAND_LINE_ARGS}
 else
-    exec "$BIN_PATH" "$@"
+    exec "$BIN_PATH" "{RUN_ARGUMENT}"
 fi

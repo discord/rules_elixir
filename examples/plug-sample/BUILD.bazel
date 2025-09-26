@@ -19,6 +19,7 @@ mix_library(
 mix_release(
     name = "bin",
     application = ":lib",
+    command_line_args = ["--no-halt"],
 )
 
 # TODO: this is what we want mix_binary to look like, when mix_release has

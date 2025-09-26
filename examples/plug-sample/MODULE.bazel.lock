@@ -549,7 +549,7 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "kYDF/T6UDScfl93W7aKfrBt/7ISjmxq+mouJorUp2sg=",
+        "bzlTransitiveDigest": "JXjq9oLGBDw1SAHaTzSVBbmEUXYdEa6eP6BML1f3DE0=",
         "usagesDigest": "jKlzNcE632C/olr6zAAunNqEljizyLf1pJTCMyG7RbQ=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -588,7 +588,7 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_packages": {
       "general": {
-        "bzlTransitiveDigest": "kYDF/T6UDScfl93W7aKfrBt/7ISjmxq+mouJorUp2sg=",
+        "bzlTransitiveDigest": "JXjq9oLGBDw1SAHaTzSVBbmEUXYdEa6eP6BML1f3DE0=",
         "usagesDigest": "7e1CQMBB1RtXHtas7LDEtYrgsKNBTsJxV+zoDF0/J9w=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},

@@ -1,16 +1,16 @@
 load(
-    "//repositories:elixir_config.bzl",
-    "INSTALLATION_TYPE_EXTERNAL",
-    "INSTALLATION_TYPE_INTERNAL",
-    _elixir_config_rule = "elixir_config",
-)
-load(
     "@bazel_tools//tools/build_defs/repo:http.bzl",
     "http_archive",
 )
 load(
     "//bzlmod:hex_package.bzl",
     _elixir_packages = "elixir_packages",
+)
+load(
+    "//repositories:elixir_config.bzl",
+    "INSTALLATION_TYPE_EXTERNAL",
+    "INSTALLATION_TYPE_INTERNAL",
+    _elixir_config_rule = "elixir_config",
 )
 
 DEFAULT_ELIXIR_VERSION = "1.15.0"

@@ -1,5 +1,5 @@
-load("@rules_erlang//bzlmod:erlang_package.bzl", "HexPackage", "GitPackage")
 load("@rules_erlang//:hex_archive.bzl", "hex_archive")
+load("@rules_erlang//bzlmod:erlang_package.bzl", "GitPackage", "HexPackage")
 
 def hex_package(
         _ctx,

@@ -93,7 +93,7 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
     return [
         DefaultInfo(
             files = depset([ebin]),
-        )
+        ),
     ]
 
 elixir_bytecode = rule(
