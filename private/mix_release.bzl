@@ -18,15 +18,15 @@ def _mix_release_impl(ctx):
 
     erlang_info = ctx.attr.application[ErlangAppInfo]
 
+    all_deps = [ctx.attr.application] + erlang_info.deps
+
     # NOTE: cargo-culted, needs further understanding
     erl_libs_files = erl_libs_contents(
         ctx,
         target_info = None,
         headers = True,
         dir = erl_libs_dir,
-        # TODO: direct_deps seems defined only in an unreleased version of
-        # rules_erlang
-        deps = erlang_info.deps,
+        deps = all_deps,
         ez_deps = ctx.files._hex_ez,
         expand_ezs = False,
     )
@@ -63,11 +63,13 @@ fi
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
 ERL_LIBS_PATH="$(realpath {erl_libs_path})"
+mkdir _output
+OUTPUT_DIR="$(realpath _output)"
+OUTPUT_FILE="$(realpath {output_file})"
 
 set -x
 cd {build_dir}
 
-mkdir _output
 # export MIX_BUILD_ROOT=$PWD/_output
 # WHERE WE'RE GOIN WE DON'T NEED NO OS CONCURRENCY LOCKS
 export MIX_OS_CONCURRENCY_LOCK=false
@@ -75,14 +77,28 @@ export MIX_OS_CONCURRENCY_LOCK=false
 # TODO: we should probably consolidate these somewhere?
 export MIX_OFFLINE=true
 
+
+mkdir -p "$OUTPUT_DIR/prod/lib"
+for app_dir in "$ERL_LIBS_PATH"/*; do
+    if [ -d "$app_dir/ebin" ]; then
+        app_name=$(basename "$app_dir")
+        mkdir -p "$OUTPUT_DIR/prod/lib/$app_name/ebin"
+        cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/prod/lib/$app_name/ebin/"
+    fi
+done
+
+ls -lR "$ERL_LIBS_PATH"
+
 MIX_ENV=prod \\
+    MIX_BUILD_ROOT="$OUTPUT_DIR" \\
     HOME=/tmp \\
     MIX_HOME=/tmp \\
     ELIXIR_ERL_OPTIONS="-pa $ERL_LIBS_PATH" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check
 
-mv _build/prod/rel/{app_name} {output_file}
+cd -
+mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         elixir_home = elixir_home,

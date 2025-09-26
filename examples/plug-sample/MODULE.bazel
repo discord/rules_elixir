@@ -1,0 +1,37 @@
+module(
+    name = "basic",
+    version = "0.1.0",
+)
+
+bazel_dep(
+    name = "rules_erlang",
+    version = "3.16.0",
+)
+local_path_override(
+    module_name = "rules_erlang",
+    path = "../../../rules_erlang",
+)
+
+bazel_dep(
+    name = "rules_elixir",
+    version = "0.1.0",
+)
+local_path_override(
+    module_name = "rules_elixir",
+    path = "../..",
+)
+
+# Test the elixir_packages extension with a simple package
+elixir_packages = use_extension(
+    "@rules_elixir//bzlmod:extensions.bzl",
+    "elixir_packages",
+)
+elixir_packages.hex_package(
+    name = "plug_crypto",
+    version = "2.1.1",
+    sha256 = "6470bce6ffe41c8bd497612ffde1a7e4af67f36a15eea5f921af71cf3e11247c",
+)
+use_repo(
+    elixir_packages,
+    "plug_crypto",
+)

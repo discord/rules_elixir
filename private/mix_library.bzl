@@ -108,15 +108,11 @@ else
     ABS_OUT_DIR="$ORIG_PWD/{out_dir}"
 fi
 
-mkdir -p "$ABS_OUT_DIR/lib/{app_name}/ebin"
+mkdir -p "$ABS_OUT_DIR"
 
 # NOTE: this directory can contain files other than .app and .beam, but we only
 # want to keep these in our build output.
-cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/lib/{app_name}/ebin/"
-
-# TODO: where can i get the `main` name from here?
-# TODO: confirm output layout of end dir
-# mv _build/ebin/lib/main/* {out_dir}/
+cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
