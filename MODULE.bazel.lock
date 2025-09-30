@@ -148,7 +148,7 @@
   "moduleExtensions": {
     "//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "2Dpshy9gdSuF9htX8weDsU4kzqikR6rcIPjh644BGTY=",
+        "bzlTransitiveDigest": "JXjq9oLGBDw1SAHaTzSVBbmEUXYdEa6eP6BML1f3DE0=",
         "usagesDigest": "lZ8LBqq5U16M0e+eBcnUFrKVGa83wzWb9XD/42iDu+w=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},

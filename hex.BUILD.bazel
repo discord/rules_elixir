@@ -1,5 +1,20 @@
-load("@rules_elixir//private:elixir_bytecode.bzl", "elixir_bytecode")
-load("@rules_elixir//:defs.bzl", "mix_library")
+# load("@rules_elixir//private:elixir_bytecode.bzl", "elixir_bytecode")
+load("@rules_elixir//:defs.bzl", "mix_library", "mix_release")
+
+exports_files(["mix.exs"])
+
+mix_library(
+    name = "lib",
+    app_name = "hex",
+    srcs = glob(["src/*.erl", "src/*.xrl", "src/*.hrl", "lib/**/*.ex"]),
+    data = ["lib/hex/http/ca-bundle.crt"],
+    mix_config = ":mix.exs",
+)
+
+mix_release(
+    name = "hex",
+    application = ":lib"
+)
 
 # load("@rules_erlang//:erlang_xrl_yrl.bzl", "erlang_xrl_yrl")
 # load("@rules_erlang//:erlang_bytecode.bzl", "erlang_bytecode")

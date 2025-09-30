@@ -27,6 +27,8 @@ def _mix_library_impl(ctx):
 
     erl_libs_dir = ctx.label.name + "_deps"
 
+    extra_ez_deps = [] if ctx.attr.app_name == "hex" else ctx.files._hex_ez
+
     erl_libs_files = erl_libs_contents(
         ctx,
         target_info = None,
@@ -38,7 +40,7 @@ def _mix_library_impl(ctx):
         # MIX_ARCHIVES later to placate mix here.
         # TODO: improve this? it would be nice if we didn't have to do
         # explicit further handling for .ez files.
-        ez_deps = ctx.files.ez_deps + ctx.files._hex_ez,
+        ez_deps = ctx.files.ez_deps + extra_ez_deps,
         expand_ezs = False,
     )
 
@@ -86,7 +88,11 @@ export HOME=/tmp
 ORIG_PWD="$PWD"
 
 ls -laR {erl_libs_path}
-ERL_LIBS_PATH="$(realpath {erl_libs_path})"
+ERL_LIBS_PATH=""
+if [[ -n "{erl_libs_path}" ]]
+then
+    ERL_LIBS_PATH="$(realpath {erl_libs_path})"
+fi
 
 cd "{build_dir}"
 
@@ -198,7 +204,7 @@ mix_library = rule(
             default = ":mix.exs",
         ),
         "srcs": attr.label_list(
-            allow_files = [".ex", ".erl"],
+            allow_files = [".ex", ".erl", ".xrl", ".hrl"],
         ),
         "data": attr.label_list(
             allow_files = True,
