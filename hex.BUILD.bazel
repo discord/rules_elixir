@@ -6,4 +6,6 @@ mix_library(
     srcs = glob(["src/*.erl", "src/*.xrl", "src/*.hrl", "lib/**/*.ex"]),
     data = ["lib/hex/http/ca-bundle.crt"],
     mix_config = ":mix.exs",
+
+    visibility = ["//visibility:public"],
 )
