@@ -28,7 +28,9 @@ def _mix_release_impl(ctx):
         headers = True,
         dir = erl_libs_dir,
         deps = all_deps,
-        ez_deps = ctx.files._hex_ez,
+        # I don't think we ever need to add this in mix_release, because we'll
+        # already have compiled all our deps into bytecode by this s       # point.
+        ez_deps = [],
         expand_ezs = False,
     )
 
@@ -88,8 +90,6 @@ for app_dir in "$ERL_LIBS_PATH"/*; do
         cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/prod/lib/$app_name/ebin/"
     fi
 done
-
-ls -lR "$ERL_LIBS_PATH"
 
 MIX_ENV=prod \\
     MIX_BUILD_ROOT="$OUTPUT_DIR" \\
@@ -161,10 +161,6 @@ mix_release = rule(
         "_template": attr.label(
             default = ":run_mix.tpl.sh",
             allow_single_file = True,
-        ),
-        "_hex_ez": attr.label(
-            default = "@rules_elixir//private:hex-2.2.3-dev.ez",
-            allow_files = [".ez"],
         ),
         "run_argument": attr.string(
             default = "start",

@@ -1,5 +1,1 @@
-exports_files([
-    "run_mix.tpl.sh",
-    "vendored_elixir_deps_src.tar.gz",
-    "hex-2.2.3-dev.ez",
-])
+exports_files(["run_mix.tpl.sh"])

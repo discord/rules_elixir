@@ -27,8 +27,6 @@ def _mix_library_impl(ctx):
 
     erl_libs_dir = ctx.label.name + "_deps"
 
-    extra_ez_deps = [] if ctx.attr.app_name == "hex" else ctx.files._hex_ez
-
     erl_libs_files = erl_libs_contents(
         ctx,
         target_info = None,
@@ -40,7 +38,7 @@ def _mix_library_impl(ctx):
         # MIX_ARCHIVES later to placate mix here.
         # TODO: improve this? it would be nice if we didn't have to do
         # explicit further handling for .ez files.
-        ez_deps = ctx.files.ez_deps + extra_ez_deps,
+        ez_deps = ctx.files.ez_deps,
         expand_ezs = False,
     )
 
@@ -87,7 +85,6 @@ export HOME=/tmp
 # Save the original working directory before cd
 ORIG_PWD="$PWD"
 
-ls -laR {erl_libs_path}
 ERL_LIBS_PATH=""
 if [[ -n "{erl_libs_path}" ]]
 then
@@ -217,14 +214,6 @@ mix_library = rule(
         "ez_deps": attr.label_list(
             allow_files = [".ez"],
         ),
-        "_hex_ez": attr.label(
-            default = "@rules_elixir//private:hex-2.2.3-dev.ez",
-            allow_files = [".ez"],
-        ),
-        # "_vendored_deps": attr.label(
-        #     default = "@rules_elixir//private:vendored_elixir_deps_src.tar.gz",
-        #     allow_single_file = True,
-        # ),
     },
     # TODO: confirm(??) (????)
     toolchains = ["//:toolchain_type"],
