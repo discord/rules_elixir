@@ -6,6 +6,7 @@ Dependency resolution is handled by external tooling.
 
 load("@rules_erlang//:hex_archive.bzl", "hex_archive")
 load(":hex_pm.bzl", "hex_archive_url")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def log(ctx, msg):
     """Log a message during extension execution."""
@@ -54,6 +55,28 @@ def _hex_package_repo(name, pkg, version, sha256, build_file, build_file_content
 
 def _elixir_packages_impl(module_ctx):
     """Implementation of the elixir_packages module extension."""
+
+    # Always provide hex_pm repository automatically
+    # This ensures hex is available as a dependency for all mix_library targets
+    http_archive(
+        name = "hex_pm",
+        urls = ["https://github.com/hexpm/hex/archive/refs/tags/v2.2.2.tar.gz"],
+        strip_prefix = "hex-2.2.2",
+        sha256 = "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
+        build_file_content = """
+load("@rules_elixir//:defs.bzl", "mix_library")
+
+mix_library(
+    name = "lib",
+    app_name = "hex",
+    srcs = glob(["src/*.erl", "src/*.xrl", "src/*.hrl", "lib/**/*.ex"]),
+    data = ["lib/hex/http/ca-bundle.crt"],
+    mix_config = ":mix.exs",
+    visibility = ["//visibility:public"],
+)
+""",
+    )
+
     packages = []
 
     # Collect all hex_package declarations from all modules
@@ -117,7 +140,6 @@ mix_library(
         "lib/**/*.ex",
         "lib/**/*.exs",
     ], allow_empty = True),
-    ez_deps = ["@rules_elixir//private:hex-2.2.3-dev.ez"],
     mix_config = ":mix.exs",
 )
 """

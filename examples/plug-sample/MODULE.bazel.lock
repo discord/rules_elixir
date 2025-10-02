@@ -549,7 +549,7 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "JXjq9oLGBDw1SAHaTzSVBbmEUXYdEa6eP6BML1f3DE0=",
+        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
         "usagesDigest": "jKlzNcE632C/olr6zAAunNqEljizyLf1pJTCMyG7RbQ=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -588,19 +588,30 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_packages": {
       "general": {
-        "bzlTransitiveDigest": "JXjq9oLGBDw1SAHaTzSVBbmEUXYdEa6eP6BML1f3DE0=",
-        "usagesDigest": "7e1CQMBB1RtXHtas7LDEtYrgsKNBTsJxV+zoDF0/J9w=",
+        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
+        "usagesDigest": "CICmE+cWi7If7im5zvM55MNKZQLl7sYyxmjlAwuwUKg=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
         "generatedRepoSpecs": {
+          "hex_pm": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/hexpm/hex/archive/refs/tags/v2.2.2.tar.gz"
+              ],
+              "strip_prefix": "hex-2.2.2",
+              "sha256": "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
+              "build_file_content": "\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
+            }
+          },
           "plug_crypto": {
             "repoRuleId": "@@rules_erlang+//:hex_archive.bzl%hex_archive",
             "attributes": {
               "package_name": "plug_crypto",
               "version": "2.1.1",
               "sha256": "6470bce6ffe41c8bd497612ffde1a7e4af67f36a15eea5f921af71cf3e11247c",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"plug_crypto\",\n    app_name = \"plug_crypto\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    ez_deps = [\"@rules_elixir//private:hex-2.2.3-dev.ez\"],\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"plug_crypto\",\n    app_name = \"plug_crypto\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"

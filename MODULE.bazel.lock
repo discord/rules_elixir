@@ -148,7 +148,7 @@
   "moduleExtensions": {
     "//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "JXjq9oLGBDw1SAHaTzSVBbmEUXYdEa6eP6BML1f3DE0=",
+        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
         "usagesDigest": "lZ8LBqq5U16M0e+eBcnUFrKVGa83wzWb9XD/42iDu+w=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -163,6 +163,45 @@
               "strip_prefixs": {},
               "sha256s": {},
               "elixir_homes": {}
+            }
+          }
+        },
+        "recordedRepoMappingEntries": [
+          [
+            "",
+            "bazel_tools",
+            "bazel_tools"
+          ],
+          [
+            "",
+            "rules_erlang",
+            "rules_erlang+"
+          ],
+          [
+            "rules_erlang+",
+            "bazel_tools",
+            "bazel_tools"
+          ]
+        ]
+      }
+    },
+    "//bzlmod:extensions.bzl%elixir_packages": {
+      "general": {
+        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
+        "usagesDigest": "fHTxGGyz6xD0g2P4O6ps2nrqPeY12hsGAK48OEjUNIM=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "hex_pm": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "urls": [
+                "https://github.com/hexpm/hex/archive/refs/tags/v2.2.2.tar.gz"
+              ],
+              "strip_prefix": "hex-2.2.2",
+              "sha256": "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
+              "build_file_content": "\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           }
         },
