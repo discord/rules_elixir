@@ -1,0 +1,15 @@
+load("@rules_elixir//:defs.bzl", "mix_library")
+
+mix_library(
+    name = "erlang_app",
+    app_name = "opentelemetry_api",
+    mix_config = ":mix.exs",
+    deps = [],
+    include = glob(["include/**/*.hrl"]),
+    srcs = glob([
+        "lib/**/*.ex",
+        "src/**/*.erl",
+        "src/opentelemetry_api.app.src",
+    ]),
+    visibility = ["//visibility:public"],
+)

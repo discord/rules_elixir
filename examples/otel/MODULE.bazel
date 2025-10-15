@@ -1,0 +1,64 @@
+module(
+    name = "basic",
+    version = "0.1.0",
+)
+
+bazel_dep(
+    name = "rules_erlang",
+    version = "3.16.0",
+)
+local_path_override(
+    module_name = "rules_erlang",
+    path = "../../../rules_erlang",
+)
+
+bazel_dep(
+    name = "rules_elixir",
+    version = "0.1.0",
+)
+local_path_override(
+    module_name = "rules_elixir",
+    path = "../..",
+)
+
+# Elixir packages
+elixir_packages = use_extension("@rules_elixir//bzlmod:extensions.bzl", "elixir_packages")
+
+elixir_packages.git_package(
+    name = "elixir_pkg_opentelemetry",
+    remote = "https://github.com/discord/opentelemetry-erlang.git",
+    # sha256 = "",  # TODO: compute from git archive
+    commit = "452250b3470d1099693bac6f74a7a964b7770c09",
+    strip_prefix = "apps/opentelemetry",
+    build_file = "//:opentelemetry.BUILD.bazel",
+)
+
+elixir_packages.git_package(
+    name = "elixir_pkg_opentelemetry_api",
+
+    remote = "https://github.com/discord/opentelemetry-erlang.git",
+    # sha256 = "",  # TODO: compute from git archive
+    commit = "452250b3470d1099693bac6f74a7a964b7770c09",
+    strip_prefix = "apps/opentelemetry_api",
+    build_file = "//:opentelemetry_api.BUILD.bazel",
+)
+
+use_repo(
+    elixir_packages,
+    "elixir_pkg_opentelemetry",
+    "elixir_pkg_opentelemetry_api",
+)
+
+# Erlang packages
+erlang_packages = use_extension("@rules_erlang//bzlmod:extensions.bzl", "erlang_package")
+
+use_repo(
+    erlang_packages,
+    # "elixir_pkg_backoff_1.1.6",
+    # "elixir_pkg_cowboy_2.10.0",
+    # "elixir_pkg_cowlib_2.12.1",
+    # "elixir_pkg_gun_2.0.1",
+    # "elixir_pkg_poolboy_1.5.2",
+    # "elixir_pkg_ranch_1.8.0",
+    # "elixir_pkg_trie_1.7.5",
+)

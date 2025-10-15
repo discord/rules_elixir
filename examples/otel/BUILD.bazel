@@ -1,0 +1,4 @@
+exports_files([
+    "opentelemetry.BUILD.bazel",
+    "opentelemetry_api.BUILD.bazel",
+])

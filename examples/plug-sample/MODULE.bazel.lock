@@ -147,7 +147,7 @@
     "@@gazelle+//:extensions.bzl%go_deps": {
       "general": {
         "bzlTransitiveDigest": "M8fMm6v0Xel/XisDHV3S3y39avz1xQBtN7lApbWyBkk=",
-        "usagesDigest": "zJeCXR/6Y2i3zV//5NgZ/v1vjfalbSsYSUo+/PRHqXo=",
+        "usagesDigest": "5f3grLBwkIPUayidmmDFZGQ4L7b6t46rnEEqYoEOcMw=",
         "recordedFileInputs": {
           "@@gazelle+//go.mod": "e915e3f980bea175c80cc30fa7433e69f1251a9ce03046579d7b24588a93e75f",
           "@@gazelle+//go.sum": "afb3c20626470bff206a91f35b0994f514f7a05ca44d9105f5ccb84e0d3ca197",
@@ -549,7 +549,7 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
+        "bzlTransitiveDigest": "ja9YVChoLMbKSLNWnKRjPwe04XqKNk1Ucu54u1OOCro=",
         "usagesDigest": "jKlzNcE632C/olr6zAAunNqEljizyLf1pJTCMyG7RbQ=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -588,8 +588,8 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_packages": {
       "general": {
-        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
-        "usagesDigest": "CICmE+cWi7If7im5zvM55MNKZQLl7sYyxmjlAwuwUKg=",
+        "bzlTransitiveDigest": "ja9YVChoLMbKSLNWnKRjPwe04XqKNk1Ucu54u1OOCro=",
+        "usagesDigest": "yZaFtNz7PKnfGOltWWgF05+PlWBn/fn+S/KLbweZzbk=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -605,13 +605,13 @@
               "build_file_content": "\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
-          "plug_crypto": {
+          "plug_cryptoasdasd": {
             "repoRuleId": "@@rules_erlang+//:hex_archive.bzl%hex_archive",
             "attributes": {
               "package_name": "plug_crypto",
               "version": "2.1.1",
               "sha256": "6470bce6ffe41c8bd497612ffde1a7e4af67f36a15eea5f921af71cf3e11247c",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"plug_crypto\",\n    app_name = \"plug_crypto\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"plug_crypto\",\n    app_name = \"plug_crypto\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
@@ -681,7 +681,7 @@
     "@@rules_erlang+//bzlmod:extensions.bzl%erlang_package": {
       "general": {
         "bzlTransitiveDigest": "pcKL16v06F9wwO8lSlxTYszdj1PpMq+wmEvsqC6oaVw=",
-        "usagesDigest": "LuWprVPtIcIRtrQ/z4PpVPnB6i5WBGITb29HM4tmznU=",
+        "usagesDigest": "bs36ABPgTLegCpEEtJUVK5xDt82UfUy+VxI7N3yo93o=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -1133,7 +1133,7 @@
     },
     "@@rules_python+//python/private/pypi:pip.bzl%pip_internal": {
       "general": {
-        "bzlTransitiveDigest": "3iIrqh4dQF0tjDrAfZU4JWgSQHSAUdc6i2i/PRacZ0M=",
+        "bzlTransitiveDigest": "ECoPNA7qZgD0mtv9CbQ2x9wGvZXQwW/oz7Iw3McEn2g=",
         "usagesDigest": "OLoIStnzNObNalKEMRq99FqenhPGLFZ5utVLV4sz7OI=",
         "recordedFileInputs": {
           "@@rules_python+//tools/publish/requirements_darwin.txt": "2994136eab7e57b083c3de76faf46f70fad130bc8e7360a7fed2b288b69e79dc",

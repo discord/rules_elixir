@@ -1,0 +1,7 @@
+load("@rules_erlang//:erlang_app.bzl", "erlang_app")
+
+erlang_app(
+    app_name = "opentelemetry",
+    deps = ["@elixir_pkg_opentelemetry_api//:erlang_app"],
+    erlc_opts = ["+nowarn_export_vars"],
+)
