@@ -3,7 +3,7 @@ load(
     "http_archive",
 )
 load(
-    "//bzlmod:hex_package.bzl",
+    "//bzlmod/private:elixir_packages.bzl",
     _elixir_packages = "elixir_packages",
 )
 load(

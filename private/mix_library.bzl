@@ -67,6 +67,8 @@ def _mix_library_impl(ctx):
 
     all_deps = flat_deps(ctx.attr.deps)
 
+    # TODO: confirm if we need to use include dir from other modules, or if
+    # that's just a way for elixir to expose and interface to erlang.
     script = """set -euo pipefail
 
 {maybe_install_erlang}
@@ -95,6 +97,8 @@ cd "{build_dir}"
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
+
+export VERSION="deadbeef"
 
 MIX_ENV=prod \\
     MIX_BUILD_ROOT=_output \\
@@ -133,7 +137,7 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.data + erl_libs_files + [ctx.file.mix_config],
+        direct = ctx.files.srcs + ctx.files.data + ctx.files.include + erl_libs_files + [ctx.file.mix_config],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -185,7 +189,7 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
             # like .so files for NIFs.
             priv = [],
             # TODO: extra erlang libs to include?
-            include = [],
+            include = ctx.files.include,
             license_files = [],
             # I...don't think we use these here?
             extra_apps = [],
@@ -201,7 +205,10 @@ mix_library = rule(
             default = ":mix.exs",
         ),
         "srcs": attr.label_list(
-            allow_files = [".ex", ".erl", ".xrl", ".hrl"],
+            # TODO: is there a more comprehensive place I can find all
+            # supported extensions than just adding them as I find them? There
+            # are a lot of weird extensions...
+            allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
         ),
         "data": attr.label_list(
             allow_files = True,
@@ -209,6 +216,9 @@ mix_library = rule(
         "deps": attr.label_list(
             # TODO: need to confirm the provider we create also outputs this
             providers = [ErlangAppInfo],
+        ),
+        "include": attr.label_list(
+            allow_files = [".hrl"],
         ),
         # TODO: we should probably set a default for this?
         "ez_deps": attr.label_list(

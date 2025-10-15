@@ -1,0 +1,5 @@
+exports_files([
+    "extensions.bzl",
+    "hex_package.bzl",
+    "git_package.bzl",
+])
