@@ -10,6 +10,18 @@ load(
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
 
+def _priv_file_dest_relative_path(label, f):
+    """Calculate the relative path for a priv file, preserving directory structure."""
+    if label.workspace_root != "":
+        workspace_root = label.workspace_root.replace("external/", "../")
+        rel_base = path_join(workspace_root, label.package)
+    else:
+        rel_base = label.package
+    if rel_base != "":
+        return f.short_path.replace(rel_base + "/", "")
+    else:
+        return f.short_path
+
 def _elixir_erl_libs_args(paths):
     if not paths:
         return ""
@@ -23,6 +35,7 @@ def _mix_library_impl(ctx):
     # TBD
     # This also needs a better name
     ebin = ctx.actions.declare_directory("ebin")
+    priv_dir = ctx.actions.declare_directory("priv") if ctx.files.priv else None
     # app_file = ctx.actions.declare_file("{app_name}.app".format(app_name=ctx.attr.app_name))
 
     erl_libs_dir = ctx.label.name + "_deps"
@@ -66,6 +79,19 @@ def _mix_library_impl(ctx):
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
     all_deps = flat_deps(ctx.attr.deps)
+
+    priv_copy_commands = ""
+    if priv_dir:
+        priv_copy_commands = "\n# Copy priv files preserving directory structure\n"
+        priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR\"\n"
+
+        for priv_file in ctx.files.priv:
+            rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
+            priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR/$(dirname {})\"\n".format(rel_path)
+            priv_copy_commands += "cp -L \"$ORIG_PWD/{}\" \"$ABS_OUT_PRIV_DIR/{}\"\n".format(
+                priv_file.path,
+                rel_path
+            )
 
     # TODO: confirm if we need to use include dir from other modules, or if
     # that's just a way for elixir to expose and interface to erlang.
@@ -120,6 +146,16 @@ mkdir -p "$ABS_OUT_DIR"
 # NOTE: this directory can contain files other than .app and .beam, but we only
 # want to keep these in our build output.
 cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
+
+# Set priv output directory if priv files exist
+if [[ -n "{priv_out_dir}" ]]; then
+    if [[ "{priv_out_dir}" == /* ]]; then
+        ABS_OUT_PRIV_DIR="{priv_out_dir}"
+    else
+        ABS_OUT_PRIV_DIR="$ORIG_PWD/{priv_out_dir}"
+    fi
+    {priv_copy_commands}
+fi
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
@@ -132,6 +168,8 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
         # env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
+        priv_out_dir = priv_dir.path if priv_dir else "",
+        priv_copy_commands = priv_copy_commands,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
@@ -144,16 +182,26 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
         ],
     )
 
+    outputs = [ebin]
+    if priv_dir:
+        outputs.append(priv_dir)
+
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [ebin],
+        outputs = outputs,
         command = script,
         mnemonic = "MIXCOMPILE",
     )
 
+    output_files = [ebin]
+    priv_files = []
+    if priv_dir:
+        output_files.append(priv_dir)
+        priv_files = [priv_dir]
+
     return [
         DefaultInfo(
-            files = depset([ebin]),
+            files = depset(output_files),
         ),
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
@@ -185,9 +233,8 @@ cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.ap
             srcs = ctx.attr.srcs,
             # TODO: beam?
             beam = [ebin],
-            # TODO: this is where we'll provide some of the weirder assets,
-            # like .so files for NIFs.
-            priv = [],
+            # Priv files with preserved directory structure
+            priv = priv_files,
             # TODO: extra erlang libs to include?
             include = ctx.files.include,
             license_files = [],
@@ -216,6 +263,9 @@ mix_library = rule(
         "deps": attr.label_list(
             # TODO: need to confirm the provider we create also outputs this
             providers = [ErlangAppInfo],
+        ),
+        "priv": attr.label_list(
+            allow_files = True,
         ),
         "include": attr.label_list(
             allow_files = [".hrl"],
