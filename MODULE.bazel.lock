@@ -148,7 +148,7 @@
   "moduleExtensions": {
     "//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "Zu6BN3tlBMdADPXJl+cGAHwbxfvfe0cqV19ZrsDrKDc=",
+        "bzlTransitiveDigest": "AgaxxqpwL4S/7RQ99BCUdUmNvnfxiGx2+O8L/WoOkCs=",
         "usagesDigest": "lZ8LBqq5U16M0e+eBcnUFrKVGa83wzWb9XD/42iDu+w=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -187,7 +187,7 @@
     },
     "//bzlmod:extensions.bzl%elixir_packages": {
       "general": {
-        "bzlTransitiveDigest": "Zu6BN3tlBMdADPXJl+cGAHwbxfvfe0cqV19ZrsDrKDc=",
+        "bzlTransitiveDigest": "AgaxxqpwL4S/7RQ99BCUdUmNvnfxiGx2+O8L/WoOkCs=",
         "usagesDigest": "fHTxGGyz6xD0g2P4O6ps2nrqPeY12hsGAK48OEjUNIM=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
