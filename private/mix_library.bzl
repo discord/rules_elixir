@@ -124,7 +124,11 @@ cd "{build_dir}"
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
 
+set -x
+
 export VERSION="deadbeef"
+
+find .
 
 MIX_ENV=prod \\
     MIX_BUILD_ROOT=_output \\
@@ -133,6 +137,8 @@ MIX_ENV=prod \\
     ELIXIR_ERL_OPTIONS="-pa $ERL_LIBS_PATH" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
+
+find _output
 
 # Use absolute path for output directory from original working directory
 if [[ "{out_dir}" == /* ]]; then
@@ -158,7 +164,7 @@ if [[ -n "{priv_out_dir}" ]]; then
 fi
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
-        app_name = ctx.attr.app_name,
+        app_name = ctx.attr.app_name or ctx.attr.name,
         # app_file_out = app_file.path,
         erlang_home = erlang_home,
         elixir_home = elixir_home,

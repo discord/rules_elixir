@@ -30,7 +30,16 @@ elixir_packages = use_extension(
     "@rules_elixir//bzlmod:extensions.bzl",
     "elixir_packages",
 )
+
+elixir_packages.hex_package(
+    name = "jason",
+    version = "1.4.4",
+    sha256 = "c5eb0cab91f094599f94d55bc63409236a8ec69a21a67814529e8d5f6cc90b3b",
+    # build_file = "//:jason.BUILD.bazel",
+)
+
 use_repo(
     elixir_packages,
-    "hex_pm",  # Automatically provided by the extension
+    "hex_pm",
+    "jason",
 )
