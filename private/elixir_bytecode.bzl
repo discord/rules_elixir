@@ -9,6 +9,15 @@ load(
     "maybe_install_erlang",
 )
 
+def unique_dirnames(files):
+    """Extract unique directory names from a list of files."""
+    dirs = []
+    for f in files:
+        dirname = f.path if f.is_directory else f.dirname
+        if dirname not in dirs:
+            dirs.append(dirname)
+    return dirs
+
 def _impl(ctx):
     ebin = ctx.actions.declare_directory(ctx.attr.dest)
 
@@ -33,6 +42,11 @@ def _impl(ctx):
             erl_libs_dir,
         )
 
+    # Process beam files to create -pa arguments for ERL_COMPILER_OPTIONS
+    pa_args = []
+    for dir in unique_dirnames(ctx.files.beam):
+        pa_args.extend(["-pa", dir])
+
     env = "\n".join([
         "export {}={}".format(k, v)
         for k, v in ctx.attr.env.items()
@@ -55,6 +69,10 @@ if [ -n "{erl_libs_path}" ]; then
     export ERL_LIBS={erl_libs_path}
 fi
 
+if [ -n "{erl_compiler_options}" ]; then
+    export ERL_COMPILER_OPTIONS="{erl_compiler_options}"
+fi
+
 {env}
 
 {setup}
@@ -68,6 +86,7 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
+        erl_compiler_options = " ".join(pa_args),
         env = env,
         setup = ctx.attr.setup,
         out_dir = ebin.path,
@@ -76,7 +95,7 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + erl_libs_files,
+        direct = ctx.files.srcs + ctx.files.beam + erl_libs_files,
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -101,6 +120,9 @@ elixir_bytecode = rule(
     attrs = {
         "srcs": attr.label_list(
             allow_files = [".ex"],
+        ),
+        "beam": attr.label_list(
+            allow_files = [".beam"],
         ),
         "elixirc_opts": attr.string_list(),
         "env": attr.string_dict(),
