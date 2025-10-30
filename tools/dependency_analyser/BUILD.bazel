@@ -14,6 +14,7 @@ elixir_app(
         "@rules_elixir//elixir:hex",
         "@rules_elixir//elixir:logger",
         "@rules_elixir//elixir:mix",
+        "@rules_elixir//elixir:eex",
         "@jason//:erlang_app",
     ],
 )
