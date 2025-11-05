@@ -11,6 +11,7 @@ elixir_app(
     ],
     app_name = "convert_lockfile",
     deps = [
+        "@rules_elixir//elixir:elixir",
         "@rules_elixir//elixir:hex",
         "@rules_elixir//elixir:logger",
         "@rules_elixir//elixir:mix",

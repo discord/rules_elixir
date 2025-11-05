@@ -37,12 +37,10 @@ defmodule DependencyAnalyser do
       System.halt(1)
     end
 
-    # Start Mix if not already started
     Mix.start()
     Mix.shell(Mix.Shell.Process)
 
-    # Set Mix environment
-    env = Keyword.get(opts, :env, :dev)
+    env = Keyword.get(opts, :env, :test)
     Mix.env(env)
 
     # Load the project
@@ -50,9 +48,13 @@ defmodule DependencyAnalyser do
     Mix.Project.get!()
     config = Mix.Project.config()
 
-    # Compile the project to ensure everything is up to date
-    IO.puts(:stderr, "Compiling project...")
-    Mix.Task.run("compile", ["--force"])
+    fetch_dependencies(env)
+
+    # Note: We skip compilation here because:
+    # 1. The dependency analyser only needs to analyze the dependency tree structure
+    # 2. Compilation in an escript environment can fail due to missing runtime modules
+    # 3. The fetched dependencies provide enough metadata for analysis
+    # If compilation is needed for specific use cases, it should be done separately
 
     # Load all dependencies - these are already resolved from the root project's perspective
     deps = Mix.Dep.load_on_environment([])
@@ -77,6 +79,24 @@ defmodule DependencyAnalyser do
     # Output as JSON
     output = Jason.encode!(all_packages, pretty: true)
     IO.puts(output)
+  end
+
+  defp fetch_dependencies(env) do
+    # Read the lock file
+    lock = Mix.Dep.Lock.read()
+
+    # Set up fetch options similar to mix deps.get
+    fetch_opts = [env: env]
+
+    # Fetch all dependencies using Mix.Dep.Fetcher API
+    # This is the same API that mix deps.get uses internally
+    apps = Mix.Dep.Fetcher.all(%{}, lock, fetch_opts)
+
+    if apps == [] do
+      IO.puts(:stderr, "All dependencies are up to date")
+    else
+      IO.puts(:stderr, "Fetched #{length(apps)} dependencies")
+    end
   end
 
   defp encode_term_to_base64(term) do
