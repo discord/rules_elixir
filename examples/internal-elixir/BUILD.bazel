@@ -1,5 +1,6 @@
 load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
+load("@rules_elixir//:mix_test.bzl", "mix_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
 elixir_app(
@@ -36,6 +37,32 @@ ex_unit_test(
         "ERL_COMPILER_OPTIONS": "deterministic",
         "ELIXIR_ERL_OPTIONS": "+fnu",
     },
+)
+
+# Example of running mix test on the entire project
+mix_test(
+    name = "mix_test_all",
+    mix_config = "mix.exs",
+    deps = [":erlang_app"],
+    env = {
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "ELIXIR_ERL_OPTIONS": "+fnu",
+    },
+)
+
+# Example of running mix test on specific test files
+mix_test(
+    name = "mix_test_specific",
+    srcs = [
+        "test/assertion_test.exs",
+    ],
+    mix_config = "mix.exs",
+    deps = [":erlang_app"],
+    env = {
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "ELIXIR_ERL_OPTIONS": "+fnu",
+    },
+    mix_test_opts = ["--trace"],
 )
 
 platform(
