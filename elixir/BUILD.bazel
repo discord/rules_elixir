@@ -24,6 +24,12 @@ elixir_as_app(
     visibility = ["//visibility:public"],
 )
 
+elixir_as_app(
+    name = "eex",
+    app = "eex",
+    visibility = ["//visibility:public"],
+)
+
 # re-export hex as an externally-includable package.
 # desired so we can build targets that depend on mix (and hex)
 alias(
