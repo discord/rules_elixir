@@ -1,0 +1,26 @@
+# Build configuration for combine_configs tool
+# This tool merges multiple binary-encoded Elixir config files
+
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_erlang//:escript.bzl", "escript_archive")
+
+package(default_visibility = ["//visibility:public"])
+
+elixir_app(
+    srcs = [
+        "lib/combine_configs.ex",
+    ],
+    app_name = "combine_configs",
+    deps = [
+        "@rules_elixir//elixir:elixir",
+    ],
+)
+
+escript_archive(
+    name = "combine_configs",
+    app = ":erlang_app",
+    headers = [
+        "shebang",
+        '{emu_args, "-escript main Elixir.CombineConfigs -hidden"}',
+    ],
+)
