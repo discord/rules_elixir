@@ -1,4 +1,4 @@
-"""Simple hex.pm utilities for rules_mix.
+"""Simple hex.pm utilities for rules_elixir.
 
 This provides basic functionality to fetch hex packages without complex
 dependency resolution - that's handled by external tooling.

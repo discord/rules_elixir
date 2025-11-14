@@ -12,6 +12,13 @@ bazel_dep(
     version = "3.16.0",
 )
 
+archive_override(
+    module_name = "rules_erlang",
+    integrity = "sha256-TGBm/CzhpUcoafLD+WHqtIs7895u6GeVJFaskQkcjsY=",
+    strip_prefix = "rules_erlang-581146252d2cd5a1c373738880afb9746ec735bb/",
+    url = "https://github.com/rabbitmq/rules_erlang/archive/581146252d2cd5a1c373738880afb9746ec735bb.tar.gz",
+)
+
 elixir_config = use_extension(
     "@rules_elixir//bzlmod:extensions.bzl",
     "elixir_config",

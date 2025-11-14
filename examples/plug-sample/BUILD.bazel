@@ -2,7 +2,7 @@ load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
-load("@rules_elixir//:defs.bzl", "mix_library", "mix_release")
+load("@rules_elixir//:mix_library.bzl", "mix_library")  # , "mix_release")
 
 mix_library(
     name = "lib",
@@ -16,11 +16,31 @@ mix_library(
     ],
 )
 
-mix_release(
-    name = "bin",
-    application = ":lib",
-    command_line_args = ["--no-halt"],
-)
+# TODO: Migrate to elixir_release + elixir_release_bundle
+# The new approach uses:
+#   1. elixir_release to create the release with Elixir-specific processing
+#   2. elixir_release_bundle to create a deployable bundle
+# Example:
+#   load("//private:elixir_release.bzl", "elixir_release")
+#   load("//private:elixir_release_bundle.bzl", "elixir_release_bundle")
+#
+#   elixir_release(
+#       name = "release",
+#       app = ":lib",
+#       release_version = "1.0.0",
+#   )
+#
+#   elixir_release_bundle(
+#       name = "bin",
+#       release = ":release",
+#       command_line_args = ["--no-halt"],
+#   )
+#
+# mix_release(
+#     name = "bin",
+#     application = ":lib",
+#     command_line_args = ["--no-halt"],
+# )
 
 # TODO: this is what we want mix_binary to look like, when mix_release has
 # been built separately (for whatever reason)

@@ -1,0 +1,257 @@
+"""Example demonstrating the new elixir_release and elixir_release_bundle rules.
+
+This example shows how to create Elixir releases using the new architecture
+that leverages rules_erlang_2 with Elixir-specific processing.
+"""
+
+load("@rules_elixir//:mix_library.bzl", "mix_library")
+load("@rules_elixir//:eval_config.bzl", "eval_config")
+load("@rules_elixir//:protocol_consolidation.bzl", "consolidate_protocols_for_release")
+load("@rules_elixir//:sys_config.bzl", "elixir_sys_config")
+load("@rules_elixir//:release.bzl", "elixir_release")
+load("@rules_elixir//:release_bundle.bzl", "elixir_release_bundle")
+
+# =============================================================================
+# Step 1: Build the application library
+# =============================================================================
+
+mix_library(
+    name = "app",
+    app_name = "elixir_release_demo",
+    mix_config = ":mix.exs",
+    srcs = glob(["lib/**/*.ex"]),
+    deps = [
+        "@jason//:erlang_app",
+    ],
+    visibility = ["//visibility:public"],
+)
+
+# =============================================================================
+# Step 2: Extract and prepare configuration
+# =============================================================================
+
+# Extract compile-time configuration for different environments
+eval_config(
+    name = "config_prod",
+    env = "prod",
+    config_files = glob(["config/*.exs"]),
+)
+
+eval_config(
+    name = "config_dev",
+    env = "dev",
+    config_files = glob(["config/*.exs"]),
+)
+
+# Generate sys.config with runtime configuration support
+elixir_sys_config(
+    name = "sys_config",
+    app_configs = [":config_prod"],
+    runtime_configs = ["config/runtime.exs"],
+    # Runtime path and Config.Provider options use sensible defaults
+)
+
+# Generate sys.config for development
+elixir_sys_config(
+    name = "sys_config_dev",
+    app_configs = [":config_dev"],
+    runtime_configs = ["config/runtime.exs"],
+)
+
+# =============================================================================
+# Step 3: Consolidate protocols for production
+# =============================================================================
+
+consolidate_protocols_for_release(
+    name = "consolidated_protocols",
+    deps = [
+        ":app",
+        "@jason//:erlang_app",
+    ],
+    env = "prod",
+)
+
+# =============================================================================
+# Step 4: Create the Elixir release
+# =============================================================================
+
+# Production release with all features enabled
+elixir_release(
+    name = "demo_release",
+    app = ":app",
+    release_name = "elixir_release_demo",
+    release_version = "1.0.0",
+    env = "prod",
+    sys_config = ":sys_config",
+    consolidated_protocols = ":consolidated_protocols",
+    runtime_config_files = ["config/runtime.exs"],
+    extra_apps = [],
+)
+
+# Development release (simplified, no protocol consolidation)
+elixir_release(
+    name = "dev_release",
+    app = ":app",
+    release_name = "elixir_release_demo_dev",
+    release_version = "1.0.0-dev",
+    env = "dev",
+    sys_config = ":sys_config_dev",
+    runtime_config_files = ["config/runtime.exs"],
+    inject_config_provider = True,  # Explicitly enable Config.Provider
+    extra_apps = [],
+)
+
+# Minimal release (no runtime config, no protocols)
+elixir_release(
+    name = "minimal_release",
+    app = ":app",
+    release_name = "elixir_release_demo_minimal",
+    release_version = "1.0.0-minimal",
+    env = "prod",
+    # No sys_config, no runtime config, no protocol consolidation
+    # This creates a minimal release with just the application
+    extra_apps = [],
+)
+
+# =============================================================================
+# Step 5: Create deployable bundles
+# =============================================================================
+
+# Production bundle
+elixir_release_bundle(
+    name = "demo_bundle",
+    release = ":demo_release",
+    startup_command = "foreground",  # Default startup mode
+    command_line_args = [
+        "+P", "1000000",  # Increase process limit
+        "+Q", "65536",     # Increase port limit
+    ],
+)
+
+# Development bundle
+elixir_release_bundle(
+    name = "dev_bundle",
+    release = ":dev_release",
+    startup_command = "console",  # Start with interactive console
+)
+
+# Self-contained bundle with ERTS included
+elixir_release_bundle(
+    name = "standalone_bundle",
+    release = ":demo_release",
+    include_erts = True,  # Include Erlang runtime for self-contained deployment
+    startup_command = "start",  # Start as daemon
+)
+
+# =============================================================================
+# Demonstration and testing targets
+# =============================================================================
+
+# Show what's in the release
+genrule(
+    name = "show_release_contents",
+    srcs = [":demo_release"],
+    outs = ["release_contents.txt"],
+    cmd = """
+        echo "=== Elixir Release Contents ===" > $@
+        echo "" >> $@
+        for file in $(SRCS); do
+            echo "File: $$file" >> $@
+            basename $$file >> $@
+            echo "---" >> $@
+        done
+    """,
+)
+
+# Show bundle structure
+genrule(
+    name = "show_bundle_structure",
+    srcs = [":demo_bundle"],
+    outs = ["bundle_structure.txt"],
+    cmd = """
+        echo "=== Elixir Release Bundle Structure ===" > $@
+        echo "" >> $@
+        find $(SRCS) -type f | head -50 >> $@
+        echo "" >> $@
+        echo "To start the release:" >> $@
+        echo "  bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo start" >> $@
+        echo "  bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo console" >> $@
+        echo "  bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo foreground" >> $@
+    """,
+)
+
+# README for the example
+genrule(
+    name = "readme",
+    srcs = [],
+    outs = ["README.md"],
+    cmd = """
+        cat > $@ << 'EOF'
+# Elixir Release Demo
+
+This example demonstrates the new `elixir_release` and `elixir_release_bundle` rules
+that provide clean integration with rules_erlang_2 while maintaining Elixir-specific
+features.
+
+## Building
+
+Build the releases:
+```bash
+bazel build //examples/elixir_release_demo:demo_release
+bazel build //examples/elixir_release_demo:demo_bundle
+```
+
+## Running
+
+Run the bundled release:
+```bash
+# Start as daemon (background)
+bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo start
+
+# Start with console (interactive)
+bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo console
+
+# Start in foreground
+bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo foreground
+```
+
+## Features Demonstrated
+
+1. **Config.Provider Integration**: Runtime configuration via `config/runtime.exs`
+2. **Protocol Consolidation**: Improved performance with consolidated protocols
+3. **Multiple Release Configurations**: Production, development, and minimal releases
+4. **Bundle Options**: With/without ERTS, different startup modes
+5. **Clean Architecture**: Separation between Erlang and Elixir concerns
+
+## Key Differences from mix_release
+
+The new approach:
+- Uses `erlang_release` from rules_erlang_2 as the base
+- Applies Elixir-specific processing via `boot_script_processor`
+- Provides cleaner separation of concerns
+- Supports all Mix release features while maintaining compatibility with OTP
+
+## Runtime Configuration
+
+Set environment variables to configure at runtime:
+```bash
+export DEMO_RUNTIME_VALUE="Hello from runtime!"
+export LOG_LEVEL=debug
+bazel-bin/examples/elixir_release_demo/demo_bundle/bin/elixir_release_demo foreground
+```
+
+The application will read these values via Config.Provider at startup.
+EOF
+    """,
+)
+
+# Test that the release builds correctly
+sh_test(
+    name = "release_build_test",
+    srcs = ["test_release_build.sh"],
+    data = [
+        ":demo_release",
+        ":demo_bundle",
+    ],
+    deps = ["@bazel_tools//tools/bash/runfiles"],
+)

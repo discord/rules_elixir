@@ -18,7 +18,7 @@ def _elixir_packages_impl(module_ctx):
         strip_prefix = "hex-2.2.2",
         sha256 = "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
         build_file_content = """
-load("@rules_elixir//:defs.bzl", "mix_library")
+load("@rules_elixir//:mix_library.bzl", "mix_library")
 
 mix_library(
     name = "lib",

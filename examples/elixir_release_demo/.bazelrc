@@ -1,0 +1,3 @@
+build --incompatible_disallow_empty_glob=False
+query --incompatible_disallow_empty_glob=False
+run --incompatible_disallow_empty_glob=False

@@ -1,4 +1,4 @@
-"""Simple hex package extension for rules_mix.
+"""Simple hex package extension for rules_elixir.
 
 This extension fetches hex packages with pre-resolved dependencies.
 Dependency resolution is handled by external tooling.

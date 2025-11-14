@@ -11,6 +11,7 @@ load(
     "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
+load(":release_info.bzl", "ReleaseInfo", "create_release_info")
 
 def _mix_release_impl(ctx):
     # TODO: run mix_release and output this
@@ -18,6 +19,11 @@ def _mix_release_impl(ctx):
     erl_libs_dir = ctx.label.name + "_deps"
 
     erlang_info = ctx.attr.application[ErlangAppInfo]
+
+    # Determine the release name and environment
+    release_name = ctx.attr.release_name if ctx.attr.release_name else ctx.label.name
+    app_name = ctx.attr.app_name if ctx.attr.app_name else erlang_info.app_name
+    env = ctx.attr.env
 
     all_deps = [ctx.attr.application] + erlang_info.deps
 
@@ -82,16 +88,16 @@ export MIX_OS_CONCURRENCY_LOCK=false
 export MIX_OFFLINE=true
 
 
-mkdir -p "$OUTPUT_DIR/prod/lib"
+mkdir -p "$OUTPUT_DIR/{env}/lib"
 for app_dir in "$ERL_LIBS_PATH"/*; do
     if [ -d "$app_dir/ebin" ]; then
         app_name=$(basename "$app_dir")
-        mkdir -p "$OUTPUT_DIR/prod/lib/$app_name/ebin"
-        cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/prod/lib/$app_name/ebin/"
+        mkdir -p "$OUTPUT_DIR/{env}/lib/$app_name/ebin"
+        cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/{env}/lib/$app_name/ebin/"
     fi
 done
 
-MIX_ENV=prod \\
+MIX_ENV={env} \\
     MIX_BUILD_ROOT="$OUTPUT_DIR" \\
     HOME=/tmp \\
     MIX_HOME=/tmp \\
@@ -100,7 +106,7 @@ MIX_ENV=prod \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check
 
 cd -
-mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
+mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         elixir_home = elixir_home,
@@ -108,7 +114,8 @@ mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
         erl_libs_path = erl_libs_path,
         # I think these should be provided via a runfiles struct....right?
         build_dir = app_config_file.dirname,
-        app_name = erlang_info.app_name,
+        app_name = app_name,
+        env = env,
         output_file = mix_release_artifacts.path,
     )
 
@@ -145,30 +152,88 @@ mv $OUTPUT_DIR/prod/rel/{app_name} {output_file}
         # deps = [files],
     )
 
+    # Create ReleaseInfo provider
+    release_info = create_release_info(
+        name = release_name,
+        version = ctx.attr.version,
+        env = env,
+        app_name = app_name,
+        has_runtime_config = ctx.attr.sys_config != None if hasattr(ctx.attr, "sys_config") else False,
+    )
+
     return [
         DefaultInfo(
             # files = inputs,
             runfiles = ctx.runfiles(files = [mix_release_artifacts]),
         ),
+        release_info,
     ]
 
 mix_release = rule(
     implementation = _mix_release_impl,
     executable = True,
     attrs = {
-        "app_name": attr.string(),
-        "application": attr.label(providers = [MixProjectInfo, ErlangAppInfo]),
+        # Existing attributes
+        "app_name": attr.string(
+            doc = "Override the application name (defaults to ErlangAppInfo.app_name)",
+        ),
+        "application": attr.label(
+            providers = [MixProjectInfo, ErlangAppInfo],
+            doc = "The Mix application to create a release for",
+        ),
+        "run_argument": attr.string(
+            default = "start",
+            doc = "The default command to run (start, daemon, etc.)",
+        ),
+        "command_line_args": attr.string_list(
+            default = [],
+            doc = "Additional command line arguments to pass to the release",
+        ),
+
+        # New attributes for v2 integration
+        "version": attr.string(
+            default = "0.1.0",
+            doc = """Release version string.
+
+            This version is used for:
+            - Release directory structure (/releases/{version}/)
+            - Runtime config path construction
+            - Version reporting in the release
+            """,
+        ),
+        "env": attr.string(
+            default = "prod",
+            values = ["prod", "dev", "test", "staging"],
+            doc = """Build environment for the release.
+
+            Affects:
+            - Which configuration files are used
+            - Compilation optimizations
+            - Runtime behavior
+            """,
+        ),
+        "release_name": attr.string(
+            doc = """Override the release name.
+
+            Defaults to the target name. This is the name that appears
+            in the generated release artifacts and commands.
+            """,
+        ),
+        "sys_config": attr.label(
+            doc = """Optional sys.config target.
+
+            If provided, uses this sys.config for the release.
+            Future: Will auto-generate if not provided.
+            """,
+        ),
+
+        # Internal
         "_template": attr.label(
             default = ":run_mix.tpl.sh",
             allow_single_file = True,
         ),
-        "run_argument": attr.string(
-            default = "start",
-        ),
-        "command_line_args": attr.string_list(
-            default = [],
-        ),
     },
+    provides = [DefaultInfo, ReleaseInfo],
     # TODO: demystify
     toolchains = ["//:toolchain_type"],
 )
