@@ -6,7 +6,7 @@ It automatically includes common dependencies (hex, elixir, logger) unless build
 
 load("//private:mix_library.bzl", _mix_library = "mix_library")
 
-def mix_library(*args, **kwargs):
+def mix_library(name='erlang_app', *args, **kwargs):
     """Compiles an Elixir library using Mix.
 
     Automatically adds dependencies for hex, elixir, and logger unless the
@@ -24,4 +24,5 @@ def mix_library(*args, **kwargs):
             Label("//elixir:logger"),
         ])
     kwargs["deps"] = deps
+    kwargs["name"] = name
     _mix_library(*args, **kwargs)
