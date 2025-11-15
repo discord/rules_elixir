@@ -95,7 +95,7 @@ ${{ABS_ELIXIR_HOME}}/bin/elixirc \\
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.beam + erl_libs_files,
+        direct = ctx.files.srcs + ctx.files.beam + ctx.files.data + erl_libs_files,
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -136,6 +136,10 @@ elixir_bytecode = rule(
             mandatory = True,
         ),
         "setup": attr.string(),
+        "data": attr.label_list(
+            allow_files = True,
+            default = [],
+        ),
     },
     toolchains = ["//:toolchain_type"],
 )

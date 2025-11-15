@@ -18,6 +18,7 @@ def elixir_app(
         elixirc_opts = [],
         ez_deps = [],
         deps = [],
+        data = [],
         priv = [],
         license_files = [],
         **kwargs):
@@ -71,6 +72,7 @@ def elixir_app(
             srcs = all_erl_srcs,
             hdrs = erl_hdrs,
             deps = deps,
+            data = data,
             dest = "erlang_ebin",
             erlc_opts = erlc_opts if erlc_opts != None else DEFAULT_ERLC_OPTS,
         )
@@ -85,6 +87,7 @@ def elixir_app(
         elixirc_opts = elixirc_opts,
         ez_deps = ez_deps,
         deps = deps,
+        data = data,
     )
 
     all_modules = [":beam_files"]
