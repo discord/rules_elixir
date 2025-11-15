@@ -75,9 +75,20 @@ export MIX_OS_CONCURRENCY_LOCK=false
 # TODO: we should probably consolidate these somewhere?
 export MIX_OFFLINE=true
 
+# Build -pa options for each dependency's ebin directory
+ERL_LIBS_PATH="{erl_libs_path}"
+PA_OPTIONS=""
+if [[ -n "$ERL_LIBS_PATH" ]]; then
+    for app_dir in "$ERL_LIBS_PATH"/*; do
+        if [[ -d "$app_dir/ebin" ]]; then
+            PA_OPTIONS="$PA_OPTIONS -pa $app_dir/ebin"
+        fi
+    done
+fi
+
 MIX_ENV=prod \\
     MIX_HOME="$(mktemp -d)" \\
-    ELIXIR_ERL_OPTIONS="-pa {erl_libs_path}" \\
+    ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="{beam_files}/ebin/ebin/lib/main:{erl_libs_path}" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check
 

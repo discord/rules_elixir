@@ -97,11 +97,21 @@ for app_dir in "$ERL_LIBS_PATH"/*; do
     fi
 done
 
+# Build -pa options for each dependency's ebin directory
+PA_OPTIONS=""
+if [[ -n "$ERL_LIBS_PATH" ]]; then
+    for app_dir in "$ERL_LIBS_PATH"/*; do
+        if [[ -d "$app_dir/ebin" ]]; then
+            PA_OPTIONS="$PA_OPTIONS -pa $app_dir/ebin"
+        fi
+    done
+fi
+
 MIX_ENV={env} \\
     MIX_BUILD_ROOT="$OUTPUT_DIR" \\
     HOME=/tmp \\
     MIX_HOME=/tmp \\
-    ELIXIR_ERL_OPTIONS="-pa $ERL_LIBS_PATH" \\
+    ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check
 
