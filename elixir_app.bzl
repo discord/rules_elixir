@@ -36,7 +36,7 @@ def elixir_app(
       ez_deps: Dependencies that are .ez files
       deps: ErlangAppInfo labels
       **kwargs: Additional args passed to the underlying app_file rule, such
-          as app_description
+          app_version, etc.
 
     Returns:
       Nothing
@@ -94,10 +94,14 @@ def elixir_app(
     if erlang_beam:
         all_modules = erlang_beam + all_modules
 
+    # Provide a default description if not specified
+    app_description = kwargs.pop("app_description", "An Elixir application")
+
     app_file(
         name = "app_file",
         out = "%s.app" % app_name,
         app_name = app_name,
+        app_description = app_description,
         extra_apps = ["elixir"] + extra_apps,
         modules = all_modules,
         **kwargs
