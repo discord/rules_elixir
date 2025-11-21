@@ -1,0 +1,31 @@
+# Build configuration for boot_script_processor tool
+# This tool processes Erlang boot scripts to add Elixir-specific functionality
+
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_erlang//:escript.bzl", "escript_archive")
+
+package(default_visibility = ["//visibility:public"])
+
+# Build the Elixir application
+elixir_app(
+    srcs = [
+        "lib/boot_script_processor.ex",
+    ],
+    app_name = "boot_script_processor",
+    deps = [
+        "@rules_elixir//elixir:elixir",
+        "@rules_elixir//elixir:logger",
+        # Config.Provider is part of Elixir standard library
+    ],
+)
+
+# Create the escript executable
+escript_archive(
+    name = "boot_script_processor",
+    app = ":erlang_app",
+    headers = [
+        "shebang",
+        # emu_args that reference the module name
+        '{emu_args, "-escript main Elixir.BootScriptProcessor -hidden"}',
+    ],
+)

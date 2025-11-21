@@ -1,0 +1,30 @@
+# Build configuration for eval_config tool
+# This tool evaluates application-specific configuration from Elixir config files
+
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_erlang//:escript.bzl", "escript_archive")
+
+package(default_visibility = ["//visibility:public"])
+
+# NOTE: This rule specifically does not use mix or require Mix.start(),
+# allowing it to run safely in parallel Bazel actions
+elixir_app(
+    srcs = [
+        "lib/eval_config.ex",
+    ],
+    app_name = "eval_config",
+    deps = [
+        "@rules_elixir//elixir:elixir",
+        # Note: We do NOT depend on Mix here - we use Config.Reader directly
+    ],
+)
+
+escript_archive(
+    name = "eval_config",
+    app = ":erlang_app",
+    headers = [
+        "shebang",
+        # Hard-coded emu_args that reference the module name
+        '{emu_args, "-escript main Elixir.EvalConfig -hidden"}',
+    ],
+)

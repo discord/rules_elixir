@@ -1,0 +1,24 @@
+# NOTE: this rule specifically *does not* use mix, allowing us to use it to
+# bootstrap rules_mix
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_erlang//:escript.bzl", "escript_archive")
+
+package(default_visibility = [ "//visibility:public"])
+
+elixir_app(
+    srcs = [
+        "lib/protocol_consolidator.ex",
+    ],
+    app_name = "protocol_consolidator",
+)
+
+escript_archive(
+    name = "protocol_consolidator",
+    # NOTE: this is hard-coded in upstream rules_elixir.
+    # Namespacing is kept sane through directory structure.
+    app = ":erlang_app",
+    headers = [
+        "shebang",
+        '{emu_args, "-escript main Elixir.ProtocolConsolidator -hidden"}',
+    ],
+)
