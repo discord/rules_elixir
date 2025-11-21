@@ -11,16 +11,26 @@ load(
 load("//private:mix_info.bzl", "MixProjectInfo")
 
 def _priv_file_dest_relative_path(label, f):
-    """Calculate the relative path for a priv file, preserving directory structure."""
+    """Calculate the relative path for a priv file, preserving directory structure.
+
+    Strips the 'priv/' prefix if present, since files are typically glob'd as 'priv/**/*'
+    but should be placed directly in the priv output directory.
+    """
     if label.workspace_root != "":
         workspace_root = label.workspace_root.replace("external/", "../")
         rel_base = path_join(workspace_root, label.package)
     else:
         rel_base = label.package
     if rel_base != "":
-        return f.short_path.replace(rel_base + "/", "")
+        rel_path = f.short_path.replace(rel_base + "/", "")
     else:
-        return f.short_path
+        rel_path = f.short_path
+
+    # Strip 'priv/' prefix if present (common when using glob(['priv/**/*']))
+    if rel_path.startswith("priv/"):
+        rel_path = rel_path[len("priv/"):]
+
+    return rel_path
 
 def _elixir_erl_libs_args(paths):
     if not paths:
@@ -81,8 +91,26 @@ def _mix_library_impl(ctx):
     all_deps = flat_deps(ctx.attr.deps)
 
     priv_copy_commands = ""
+    priv_copy_to_build_dir = ""
     if priv_dir:
-        priv_copy_commands = "\n# Copy priv files preserving directory structure\n"
+        # Commands to copy priv files to build directory (for Mix to access during compilation)
+        priv_copy_to_build_dir = "\n# Copy priv files to build directory for Mix access\n"
+        for priv_file in ctx.files.priv:
+            rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
+            priv_copy_to_build_dir += "    mkdir -p \"priv/$(dirname {})\"\n".format(rel_path)
+            # Only copy if source and destination are different (avoid "same file" errors)
+            priv_copy_to_build_dir += "    if [[ \"$ORIG_PWD/{}\" != \"$(pwd)/priv/{}\" ]]; then\n".format(
+                priv_file.path,
+                rel_path
+            )
+            priv_copy_to_build_dir += "        cp -L \"$ORIG_PWD/{}\" \"priv/{}\"\n".format(
+                priv_file.path,
+                rel_path
+            )
+            priv_copy_to_build_dir += "    fi\n"
+
+        # Commands to copy priv files to output directory (for ErlangAppInfo provider)
+        priv_copy_commands = "\n# Copy priv files to output directory preserving directory structure\n"
         priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR\"\n"
 
         for priv_file in ctx.files.priv:
@@ -120,6 +148,13 @@ then
 fi
 
 cd "{build_dir}"
+
+# Copy priv files into build directory BEFORE compilation
+# This makes them available to Mix tasks, NIFs, etc. during compilation
+if [[ -n "{priv_out_dir}" ]]; then
+    mkdir -p priv
+{priv_copy_to_build_dir}
+fi
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
@@ -179,13 +214,14 @@ fi
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
         priv_out_dir = priv_dir.path if priv_dir else "",
+        priv_copy_to_build_dir = priv_copy_to_build_dir,
         priv_copy_commands = priv_copy_commands,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.data + ctx.files.include + erl_libs_files + [ctx.file.mix_config],
+        direct = ctx.files.srcs + ctx.files.data + ctx.files.include + ctx.files.priv + erl_libs_files + [ctx.file.mix_config],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,

@@ -195,7 +195,7 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
+        "bzlTransitiveDigest": "nKLE1T2qrbRkYN4bFQb7oros493uoHbtw9KKRxvCJSI=",
         "usagesDigest": "jKlzNcE632C/olr6zAAunNqEljizyLf1pJTCMyG7RbQ=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -234,8 +234,8 @@
     },
     "@@rules_elixir+//bzlmod:extensions.bzl%elixir_packages": {
       "general": {
-        "bzlTransitiveDigest": "hHfxcoZF7q6rIkMEDZT8K6SGTQJJEVlGiabCnRpC1n8=",
-        "usagesDigest": "oON3mCnQZh1TzRXkbqc7S7Ehqi1X/VrK5V6Dpu3CbhE=",
+        "bzlTransitiveDigest": "nKLE1T2qrbRkYN4bFQb7oros493uoHbtw9KKRxvCJSI=",
+        "usagesDigest": "11FES8aD79oLD/V9kfeW0yGw1WcAzAjRv4wErnLE6bU=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -248,7 +248,7 @@
               ],
               "strip_prefix": "hex-2.2.2",
               "sha256": "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
-              "build_file_content": "\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
+              "build_file_content": "\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
           "earmark_parser": {
@@ -257,7 +257,7 @@
               "package_name": "earmark_parser",
               "version": "1.4.35",
               "sha256": "8652ba3cb85608d0d7aa2d21b45c6fad4ddc9a1f9a1f1b30ca3a246f0acc33f6",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"earmark_parser\",\n    app_name = \"earmark_parser\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":earmark_parser\",\n)\n\nmix_library(\n    name = \"earmark_parser\",\n    app_name = \"earmark_parser\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
@@ -271,7 +271,7 @@
               "package_name": "ex_doc",
               "version": "0.30.9",
               "sha256": "d7aaaf21e95dc5cddabf89063327e96867d00013963eadf2c6ad135506a8bc10",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"ex_doc\",\n    app_name = \"ex_doc\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":ex_doc\",\n)\n\nmix_library(\n    name = \"ex_doc\",\n    app_name = \"ex_doc\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
@@ -285,7 +285,7 @@
               "package_name": "decimal",
               "version": "2.1.1",
               "sha256": "53cfe5f497ed0e7771ae1a475575603d77425099ba5faef9394932b35020ffcc",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"decimal\",\n    app_name = \"decimal\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":decimal\",\n)\n\nmix_library(\n    name = \"decimal\",\n    app_name = \"decimal\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
@@ -299,7 +299,7 @@
               "package_name": "jason",
               "version": "1.4.1",
               "sha256": "fbb01ecdfd565b56261302f7e1fcc27c4fb8f32d56eab74db621fc154604a7a1",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"jason\",\n    app_name = \"jason\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":jason\",\n)\n\nmix_library(\n    name = \"jason\",\n    app_name = \"jason\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
@@ -313,7 +313,7 @@
               "package_name": "plug_crypto",
               "version": "2.1.1",
               "sha256": "",
-              "build_file_content": "load(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\nmix_library(\n    name = \"plug_crypto\",\n    app_name = \"plug_crypto\",\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":plug_crypto\",\n)\n\nmix_library(\n    name = \"plug_crypto\",\n    app_name = \"plug_crypto\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
