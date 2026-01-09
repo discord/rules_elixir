@@ -13,7 +13,7 @@ mix_library(
     mix_config = ":mix.exs",
     srcs = glob(['lib/**/*.ex']),
     deps = [
-        "@plug_crypto//:plug_crypto"
+        "@plug_cryptoasdasd//:plug_crypto"
     ],
 )
 
@@ -46,7 +46,10 @@ mix_library(
 mix_test(
     name = "plug_sample_test",
     mix_config = ":mix.exs",
-    deps = [":lib"],
+    data = glob(['lib/**/*.ex', 'test/**/*.exs']),
+    deps = [
+        "@plug_cryptoasdasd//:plug_crypto"
+    ],
     env = {
         "ERL_COMPILER_OPTIONS": "deterministic",
         "ELIXIR_ERL_OPTIONS": "+fnu",

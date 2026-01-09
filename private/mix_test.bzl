@@ -55,13 +55,17 @@ else
 fi
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
 
-# Set up ERL_LIBS for dependencies
-export ERL_LIBS="$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}"
-
 # Navigate to the mix project root
 cd "$TEST_SRCDIR/$TEST_WORKSPACE/{package}"
 
-export HOME=${{PWD}}
+# Set up ERL_LIBS for dependencies
+ERL_LIBS_PATH=""
+if [[ -n "$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}" && -d "$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}" ]]; then
+    ERL_LIBS_PATH="$(realpath $TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path})"
+fi
+export ERL_LIBS="$ERL_LIBS_PATH"
+
+export HOME=/tmp
 export MIX_HOME=/tmp/.mix
 export MIX_ENV=test
 
@@ -69,11 +73,35 @@ export MIX_ENV=test
 
 {setup}
 
+# Build -pa options for each dependency's ebin directory
+PA_OPTIONS=""
+if [[ -n "$ERL_LIBS_PATH" ]]; then
+    for app_dir in "$ERL_LIBS_PATH"/*; do
+        if [[ -d "$app_dir/ebin" ]]; then
+            PA_OPTIONS="$PA_OPTIONS -pa $app_dir/ebin"
+        fi
+    done
+fi
+
+# Compile the project first (similar to mix_library)
+mkdir -p _build
+MIX_ENV=test \\
+    MIX_BUILD_ROOT=_build \\
+    MIX_HOME=/tmp \\
+    MIX_OFFLINE=true \\
+    ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
+    ERL_LIBS="$ERL_LIBS_PATH" \\
+    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
+
 # Run mix test
 set -x
 MIX_ENV=test \\
-    ELIXIR_ERL_OPTIONS="-pa $ERL_LIBS" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix test {test_paths} {mix_test_opts} \\
+    MIX_BUILD_ROOT=_build \\
+    MIX_HOME=/tmp \\
+    MIX_OFFLINE=true \\
+    ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
+    ERL_LIBS="$ERL_LIBS_PATH" \\
+    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-start --no-deps-check {test_paths} {mix_test_opts} \\
     | tee "${{TEST_UNDECLARED_OUTPUTS_DIR}}/test.log"
 set +x
 
