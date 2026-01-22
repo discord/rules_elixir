@@ -43,9 +43,9 @@ def _mix_library_impl(ctx):
     # TODO: i don't _think_ we need to explicitly pass the output dir in, and
     # should instead return a Provider that can provide erlang...library info?
     # TBD
-    # Use target name in output directory to avoid conflicts between targets
-    ebin = ctx.actions.declare_directory(ctx.label.name + "_ebin")
-    priv_dir = ctx.actions.declare_directory(ctx.label.name + "_priv") if ctx.files.priv else None
+    # This also needs a better name
+    ebin = ctx.actions.declare_directory("ebin")
+    priv_dir = ctx.actions.declare_directory("priv") if ctx.files.priv else None
     # app_file = ctx.actions.declare_file("{app_name}.app".format(app_name=ctx.attr.app_name))
 
     erl_libs_dir = ctx.label.name + "_deps"
@@ -70,7 +70,7 @@ def _mix_library_impl(ctx):
     #  - confirm if we need a secondary one of these for non-runtime deps
     #    (or maybe we just construct a combination classpath?)
     erl_libs_path = ""
-    if len(erl_libs_files) > 0:
+    if erl_libs_files:
         erl_libs_path = path_join(
             ctx.bin_dir.path,
             ctx.label.workspace_root,
@@ -93,33 +93,26 @@ def _mix_library_impl(ctx):
     priv_copy_commands = ""
     priv_copy_to_build_dir = ""
     if priv_dir:
-        # Commands to copy priv files to build directory (for Mix to access during compilation)
-        priv_copy_to_build_dir = "\n# Copy priv files to build directory for Mix access\n"
-        for priv_file in ctx.files.priv:
-            rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
-            priv_copy_to_build_dir += "    mkdir -p \"priv/$(dirname {})\"\n".format(rel_path)
-            # Only copy if source and destination are different (avoid "same file" errors)
-            priv_copy_to_build_dir += "    if [[ \"$ORIG_PWD/{}\" != \"$(pwd)/priv/{}\" ]]; then\n".format(
-                priv_file.path,
-                rel_path
-            )
-            priv_copy_to_build_dir += "        cp -L \"$ORIG_PWD/{}\" \"priv/{}\"\n".format(
-                priv_file.path,
-                rel_path
-            )
-            priv_copy_to_build_dir += "    fi\n"
-
-        # Commands to copy priv files to output directory (for ErlangAppInfo provider)
-        priv_copy_commands = "\n# Copy priv files to output directory preserving directory structure\n"
-        priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR\"\n"
+        build_dir_cmds = []
+        output_dir_cmds = []
 
         for priv_file in ctx.files.priv:
             rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
-            priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR/$(dirname {})\"\n".format(rel_path)
-            priv_copy_commands += "cp -L \"$ORIG_PWD/{}\" \"$ABS_OUT_PRIV_DIR/{}\"\n".format(
-                priv_file.path,
-                rel_path
-            )
+            src_path = priv_file.path
+
+            # Commands to copy priv files to build directory (for Mix to access during compilation)
+            build_dir_cmds.append('    mkdir -p "priv/$(dirname {})"'.format(rel_path))
+            # Conditional to avoid same-file errors
+            build_dir_cmds.append('    if [[ "$ORIG_PWD/{}" != "$(pwd)/priv/{}" ]]; then'.format(src_path, rel_path))
+            build_dir_cmds.append('        cp -L "$ORIG_PWD/{}" "priv/{}"'.format(src_path, rel_path))
+            build_dir_cmds.append("    fi")
+
+            # Commands to copy priv files to output directory (for ErlangAppInfo provider)
+            output_dir_cmds.append('mkdir -p "$ABS_OUT_PRIV_DIR/$(dirname {})"'.format(rel_path))
+            output_dir_cmds.append('cp -L "$ORIG_PWD/{}" "$ABS_OUT_PRIV_DIR/{}"'.format(src_path, rel_path))
+
+        priv_copy_to_build_dir = "\n# Copy priv files to build directory for Mix access\n" + "\n".join(build_dir_cmds) + "\n"
+        priv_copy_commands = "\n# Copy priv files to output directory preserving directory structure\nmkdir -p \"$ABS_OUT_PRIV_DIR\"\n" + "\n".join(output_dir_cmds) + "\n"
 
     # TODO: confirm if we need to use include dir from other modules, or if
     # that's just a way for elixir to expose and interface to erlang.
