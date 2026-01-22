@@ -11,5 +11,5 @@ def mix_library(*args, **kwargs):
 def mix_release(*args, **kwargs):
     _mix_release(*args, **kwargs)
 
-def mix_test(*args, **kwargs):
-    _mix_test(*args, **kwargs)
+def mix_test(name, lib, **kwargs):
+    _mix_test(name = name, lib = lib, **kwargs)

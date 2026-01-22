@@ -43,9 +43,9 @@ def _mix_library_impl(ctx):
     # TODO: i don't _think_ we need to explicitly pass the output dir in, and
     # should instead return a Provider that can provide erlang...library info?
     # TBD
-    # This also needs a better name
-    ebin = ctx.actions.declare_directory("ebin")
-    priv_dir = ctx.actions.declare_directory("priv") if ctx.files.priv else None
+    # Use target name in output directory to avoid conflicts between targets
+    ebin = ctx.actions.declare_directory(ctx.label.name + "_ebin")
+    priv_dir = ctx.actions.declare_directory(ctx.label.name + "_priv") if ctx.files.priv else None
     # app_file = ctx.actions.declare_file("{app_name}.app".format(app_name=ctx.attr.app_name))
 
     erl_libs_dir = ctx.label.name + "_deps"
@@ -171,7 +171,7 @@ if [[ -n "$ERL_LIBS_PATH" ]]; then
     done
 fi
 
-MIX_ENV=prod \\
+MIX_ENV={mix_env} \\
     MIX_BUILD_ROOT=_output \\
     MIX_HOME=/tmp \\
     MIX_OFFLINE=true \\
@@ -190,7 +190,7 @@ mkdir -p "$ABS_OUT_DIR"
 
 # NOTE: this directory can contain files other than .app and .beam, but we only
 # want to keep these in our build output.
-cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
+cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
 
 # Set priv output directory if priv files exist
 if [[ -n "{priv_out_dir}" ]]; then
@@ -210,6 +210,7 @@ fi
         erl_libs_path = erl_libs_path,
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
+        mix_env = ctx.attr.mix_env,
         # env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
@@ -252,6 +253,7 @@ fi
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
             mix_config = ctx.file.mix_config,
+            mix_env = ctx.attr.mix_env,
             # ebin = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'ebin']),
             # TODO: should we actually keep this, or should be just YEET the
             # consolidated directory? it seems only have dependencies
@@ -293,6 +295,11 @@ mix_library = rule(
     implementation = _mix_library_impl,
     attrs = {
         "app_name": attr.string(),
+        "mix_env": attr.string(
+            default = "prod",
+            values = ["prod", "test", "dev"],
+            doc = "The MIX_ENV to use when compiling (default: prod)",
+        ),
         "mix_config": attr.label(
             allow_single_file = [".exs"],
             default = ":mix.exs",

@@ -1,4 +1,4 @@
-defmodule AssertionTest do
+defmodule HelpedTest do
   use ExUnit.Case, async: true
   import TestHelper
 

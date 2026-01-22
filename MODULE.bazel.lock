@@ -138,7 +138,7 @@
   "moduleExtensions": {
     "//bzlmod:extensions.bzl%elixir_config": {
       "general": {
-        "bzlTransitiveDigest": "AgaxxqpwL4S/7RQ99BCUdUmNvnfxiGx2+O8L/WoOkCs=",
+        "bzlTransitiveDigest": "nKLE1T2qrbRkYN4bFQb7oros493uoHbtw9KKRxvCJSI=",
         "usagesDigest": "lZ8LBqq5U16M0e+eBcnUFrKVGa83wzWb9XD/42iDu+w=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -177,7 +177,7 @@
     },
     "//bzlmod:extensions.bzl%elixir_packages": {
       "general": {
-        "bzlTransitiveDigest": "AgaxxqpwL4S/7RQ99BCUdUmNvnfxiGx2+O8L/WoOkCs=",
+        "bzlTransitiveDigest": "nKLE1T2qrbRkYN4bFQb7oros493uoHbtw9KKRxvCJSI=",
         "usagesDigest": "Ad4H9mIpXKptAZmMVOpq45Ouu6rYDrYeh6xizvSWUE8=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -191,7 +191,7 @@
               ],
               "strip_prefix": "hex-2.2.2",
               "sha256": "f3ba423f2937eb593eccc863c060f147af333e188620b7879ceb4e3b97faf07c",
-              "build_file_content": "\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
+              "build_file_content": "\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\nmix_library(\n    name = \"lib\",\n    app_name = \"hex\",\n    srcs = glob([\"src/*.erl\", \"src/*.xrl\", \"src/*.hrl\", \"lib/**/*.ex\"]),\n    data = [\"lib/hex/http/ca-bundle.crt\"],\n    mix_config = \":mix.exs\",\n    visibility = [\"//visibility:public\"],\n)\n"
             }
           },
           "jason": {
@@ -200,7 +200,7 @@
               "package_name": "jason",
               "version": "1.4.4",
               "sha256": "c5eb0cab91f094599f94d55bc63409236a8ec69a21a67814529e8d5f6cc90b3b",
-              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:defs.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":jason\",\n)\n\nmix_library(\n    name = \"jason\",\n    app_name = \"jason\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
+              "build_file_content": "package(default_visibility = [\"//visibility:public\"])\n\nload(\"@rules_elixir//:mix_library.bzl\", \"mix_library\")\n\n# A little ugly, but lets us keep a relatively-consistent interface to\n# rules_erlang\nalias(\n    name = \"erlang_app\",\n    actual = \":jason\",\n)\n\nmix_library(\n    name = \"jason\",\n    app_name = \"jason\",\n    include = glob([\n        \"include/**/*.hrl\",\n    ], allow_empty = True),\n    srcs = glob([\n        \"lib/**/*.ex\",\n        \"lib/**/*.exs\",\n    ], allow_empty = True),\n    deps = [],\n    mix_config = \":mix.exs\",\n)\n",
               "patches": [],
               "patch_args": [
                 "-p0"
@@ -264,8 +264,8 @@
     },
     "@@rules_erlang+//bzlmod:extensions.bzl%erlang_config": {
       "general": {
-        "bzlTransitiveDigest": "pcKL16v06F9wwO8lSlxTYszdj1PpMq+wmEvsqC6oaVw=",
-        "usagesDigest": "2mlGUm86FPZOH0K+ht1JoV81hZZCZOrHNJzRjlwuZQo=",
+        "bzlTransitiveDigest": "hEjE3X+zNRjxVZUSQbocYSICA4kaa8IqXZp8riq7GHM=",
+        "usagesDigest": "U8zB6BIRGIuea/SM4vrnQj7dnmq4f1ckiubh2ipG1Z8=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -357,6 +357,37 @@
             "rules_erlang+",
             "rules_erlang",
             "rules_erlang+"
+          ]
+        ]
+      }
+    },
+    "@@rules_erlang+//bzlmod:extensions.bzl%gmake_config": {
+      "general": {
+        "bzlTransitiveDigest": "hEjE3X+zNRjxVZUSQbocYSICA4kaa8IqXZp8riq7GHM=",
+        "usagesDigest": "lNRVW9LcmyfHI28I7FALwjESg77YJ8jUV5RX7xbDwJI=",
+        "recordedFileInputs": {},
+        "recordedDirentsInputs": {},
+        "envVariables": {},
+        "generatedRepoSpecs": {
+          "gmake_config": {
+            "repoRuleId": "@@rules_erlang+//repositories:gmake_config.bzl%gmake_config",
+            "attributes": {
+              "gmakes": {
+                "default": "/usr/bin/make"
+              }
+            }
+          }
+        },
+        "recordedRepoMappingEntries": [
+          [
+            "rules_erlang+",
+            "bazel_skylib",
+            "bazel_skylib+"
+          ],
+          [
+            "rules_erlang+",
+            "bazel_tools",
+            "bazel_tools"
           ]
         ]
       }

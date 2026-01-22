@@ -3,17 +3,18 @@ load(
     _mix_test = "mix_test",
 )
 
-def mix_test(**kwargs):
-    """Run mix test on an Elixir project.
+def mix_test(name, lib, **kwargs):
+    """Run mix test using pre-compiled artifacts from a mix_library.
 
-    This rule runs `mix test` on a Mix project, executing the project's test suite.
+    This rule runs `mix test` on a Mix project using pre-compiled artifacts
+    from a mix_library target. The library must be compiled with mix_env="test".
 
     Args:
         name: The name of the test target
-        mix_config: The mix.exs configuration file (default: ":mix.exs")
+        lib: The mix_library target containing the compiled application.
+             Must be compiled with mix_env="test".
         srcs: Optional list of specific test files to run. If empty, runs all tests in test/
-        data: Additional data files needed for tests
-        deps: Dependencies required for the tests (must provide ErlangAppInfo)
+        data: Additional data files needed for tests (include test/**/*.exs here)
         ez_deps: Erlang/Elixir archive dependencies (.ez files)
         tools: Additional tools needed for tests
         env: Environment variables to set during test execution
@@ -23,15 +24,21 @@ def mix_test(**kwargs):
 
     Example:
         ```python
+        # First, create a test library compiled with MIX_ENV=test
+        mix_library(
+            name = "my_app_test_lib",
+            app_name = "my_app",
+            mix_env = "test",
+            srcs = glob(["lib/**/*.ex"]),
+        )
+
+        # Then create the test target
         mix_test(
-            name = "my_project_test",
-            mix_config = "mix.exs",
-            deps = [":my_app"],
-            env = {
-                "MIX_ENV": "test",
-            },
+            name = "my_app_test",
+            lib = ":my_app_test_lib",
+            data = glob(["test/**/*.exs"]),
             mix_test_opts = ["--trace"],
         )
         ```
     """
-    _mix_test(**kwargs)
+    _mix_test(name = name, lib = lib, **kwargs)
