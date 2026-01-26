@@ -118,27 +118,21 @@ if [[ -n "{lib_priv_path}" ]]; then
     fi
 fi
 
-# Also set up dependency ebin directories in _build
-if [[ -n "$ERL_LIBS_PATH" ]]; then
-    for app_dir in "$ERL_LIBS_PATH"/*; do
-        app_basename=$(basename "$app_dir")
-        if [[ -d "$app_dir/ebin" ]]; then
-            mkdir -p "_build/test/lib/$app_basename/ebin"
-            cp -r "$app_dir/ebin"/* "_build/test/lib/$app_basename/ebin/"
-        fi
-        if [[ -d "$app_dir/priv" ]]; then
-            mkdir -p "_build/test/lib/$app_basename/priv"
-            cp -r "$app_dir/priv"/* "_build/test/lib/$app_basename/priv/"
-        fi
-    done
-fi
-
-# Build -pa options for each dependency's ebin directory
+# Set up dependency directories and build PA_OPTIONS in a single pass
 PA_OPTIONS="-pa _build/test/lib/{app_name}/ebin"
 if [[ -n "$ERL_LIBS_PATH" ]]; then
     for app_dir in "$ERL_LIBS_PATH"/*; do
+        app_basename=$(basename "$app_dir")
+        # Copy ebin directory and add to PA_OPTIONS
         if [[ -d "$app_dir/ebin" ]]; then
+            mkdir -p "_build/test/lib/$app_basename/ebin"
+            cp -r "$app_dir/ebin"/* "_build/test/lib/$app_basename/ebin/"
             PA_OPTIONS="$PA_OPTIONS -pa $app_dir/ebin"
+        fi
+        # Copy priv directory if present
+        if [[ -d "$app_dir/priv" ]]; then
+            mkdir -p "_build/test/lib/$app_basename/priv"
+            cp -r "$app_dir/priv"/* "_build/test/lib/$app_basename/priv/"
         fi
     done
 fi
