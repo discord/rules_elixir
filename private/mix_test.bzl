@@ -36,8 +36,6 @@ def _mix_test_impl(ctx):
         ctx,
         dir = erl_libs_dir,
         deps = lib_deps,
-        ez_deps = ctx.files.ez_deps,
-        expand_ezs = False,
     )
 
     package = ctx.label.package
@@ -213,10 +211,6 @@ mix_test = rule(
         "srcs": attr.label_list(
             allow_files = [".exs"],
             doc = "Test files to include in runfiles and optionally run. If specific files are provided, only those tests are run. If empty, all discovered tests are run.",
-        ),
-        "ez_deps": attr.label_list(
-            allow_files = [".ez"],
-            doc = "Erlang/Elixir archive dependencies",
         ),
         "tools": attr.label_list(
             cfg = "target",

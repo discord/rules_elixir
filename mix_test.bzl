@@ -14,8 +14,6 @@ def mix_test(name, lib, **kwargs):
         lib: The mix_library target containing the compiled application.
              Must be compiled with mix_env="test".
         srcs: Optional list of specific test files to run. If empty, runs all tests in test/
-        data: Additional data files needed for tests (include test/**/*.exs here)
-        ez_deps: Erlang/Elixir archive dependencies (.ez files)
         tools: Additional tools needed for tests
         env: Environment variables to set during test execution
         setup: Shell commands to run before executing tests
@@ -36,7 +34,7 @@ def mix_test(name, lib, **kwargs):
         mix_test(
             name = "my_app_test",
             lib = ":my_app_test_lib",
-            data = glob(["test/**/*.exs"]),
+            srcs = glob(["test/**/*.exs"]),
             mix_test_opts = ["--trace"],
         )
         ```
