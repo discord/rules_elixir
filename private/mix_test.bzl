@@ -54,9 +54,18 @@ def _mix_test_impl(ctx):
     output = ctx.actions.declare_file(ctx.label.name)
 
     # Build test path arguments if specific test files are provided
+    # Strip package prefix since we cd into the package directory
     test_paths = ""
     if ctx.files.srcs:
-        test_paths = " ".join([s.short_path for s in ctx.files.srcs])
+        paths = []
+        for s in ctx.files.srcs:
+            # Remove package prefix from path since we cd into package dir
+            if package and s.short_path.startswith(package + "/"):
+                relative_path = s.short_path[len(package) + 1:]
+                paths.append(relative_path)
+            else:
+                paths.append(s.short_path)
+        test_paths = " ".join(paths)
 
     # Get the path to the lib's ebin directory
     # lib_beam_dirs is a list of File objects (directories)
@@ -178,7 +187,6 @@ MIX_ENV=test \\
         [
             ctx.runfiles(
                 ctx.files.srcs +
-                ctx.files.data +
                 erl_libs_files +
                 lib_files +
                 [mix_config]
@@ -204,11 +212,7 @@ mix_test = rule(
         ),
         "srcs": attr.label_list(
             allow_files = [".exs"],
-            doc = "Optional list of specific test files to run. If empty, runs all tests in test/.",
-        ),
-        "data": attr.label_list(
-            allow_files = True,
-            doc = "Additional data files needed for tests (include test/**/*.exs here)",
+            doc = "Test files to include in runfiles and optionally run. If specific files are provided, only those tests are run. If empty, all discovered tests are run.",
         ),
         "ez_deps": attr.label_list(
             allow_files = [".ez"],

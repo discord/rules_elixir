@@ -28,7 +28,7 @@ mix_library(
 mix_test(
     name = "basic_test",
     lib = ":basic_test_lib",
-    data = glob(['lib/**/*.ex', 'test/**/*.exs']),
+    srcs = glob(['test/**/*.exs']),
     env = {
         "ERL_COMPILER_OPTIONS": "deterministic",
         "ELIXIR_ERL_OPTIONS": "+fnu",

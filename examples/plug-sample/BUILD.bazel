@@ -60,7 +60,7 @@ mix_library(
 mix_test(
     name = "plug_sample_test",
     lib = ":lib_test",
-    data = glob(['lib/**/*.ex', 'test/**/*.exs']),
+    srcs = glob(['test/**/*.exs']), # This is optional
     env = {
         "ERL_COMPILER_OPTIONS": "deterministic",
         "ELIXIR_ERL_OPTIONS": "+fnu",
