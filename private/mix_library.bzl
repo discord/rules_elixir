@@ -101,11 +101,8 @@ def _mix_library_impl(ctx):
             src_path = priv_file.path
 
             # Commands to copy priv files to build directory (for Mix to access during compilation)
-            build_dir_cmds.append('    mkdir -p "priv/$(dirname {})"'.format(rel_path))
-            # Conditional to avoid same-file errors
-            build_dir_cmds.append('    if [[ "$ORIG_PWD/{}" != "$(pwd)/priv/{}" ]]; then'.format(src_path, rel_path))
-            build_dir_cmds.append('        cp -L "$ORIG_PWD/{}" "priv/{}"'.format(src_path, rel_path))
-            build_dir_cmds.append("    fi")
+            build_dir_cmds.append('mkdir -p "priv/$(dirname {})"'.format(rel_path))
+            build_dir_cmds.append('cp -L "$ORIG_PWD/{}" "priv/{}"'.format(src_path, rel_path))
 
             # Commands to copy priv files to output directory (for ErlangAppInfo provider)
             output_dir_cmds.append('mkdir -p "$ABS_OUT_PRIV_DIR/$(dirname {})"'.format(rel_path))
@@ -146,7 +143,7 @@ cd "{build_dir}"
 # This makes them available to Mix tasks, NIFs, etc. during compilation
 if [[ -n "{priv_out_dir}" ]]; then
     mkdir -p priv
-{priv_copy_to_build_dir}
+    {priv_copy_to_build_dir}
 fi
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
