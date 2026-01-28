@@ -3,7 +3,7 @@ load(
     _mix_test = "mix_test",
 )
 
-def mix_test(name, lib, **kwargs):
+def mix_test(name, lib, srcs = None, **kwargs):
     """Run mix test using pre-compiled artifacts from a mix_library.
 
     This rule runs `mix test` on a Mix project using pre-compiled artifacts
@@ -39,4 +39,11 @@ def mix_test(name, lib, **kwargs):
         )
         ```
     """
-    _mix_test(name = name, lib = lib, **kwargs)
+    # Validate test files exist if srcs not provided
+    if srcs == None or len(srcs) == 0:
+        test_files = native.glob(["test/**/*_test.exs"])
+        if len(test_files) == 0:
+            fail("mix_test '{}' has no tests to run. ".format(name) +
+                 "No files matching test/**/*_test.exs were found and no srcs were provided.")
+
+    _mix_test(name = name, lib = lib, srcs = srcs, **kwargs)
