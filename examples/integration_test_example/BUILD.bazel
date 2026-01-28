@@ -1,0 +1,36 @@
+load("@rules_elixir//:mix_library.bzl", "mix_library")
+load("@rules_elixir//:mix_test.bzl", "mix_test")
+load("//:integration_test.bzl", "mix_integration_test")
+
+package(default_visibility = ["//visibility:public"])
+
+# Compile the library for testing
+mix_library(
+    name = "itest_example",
+    app_name = "itest_example",
+    mix_env = "test",
+    mix_config = ":mix.exs",
+    srcs = glob(["lib/**/*.ex"]),
+)
+
+# Unit tests (no services needed)
+mix_test(
+    name = "unit_test",
+    lib = ":itest_example",
+    srcs = glob(["test/**/*.exs"]),
+)
+
+# Integration test with etcd service
+# This demonstrates the integration test framework
+mix_integration_test(
+    name = "integration_test",
+    lib = ":itest_example",
+    srcs = glob(["test/**/*.exs"]),
+    services = [
+        "//services:etcd",
+    ],
+    env = {
+        "ETCD_URL": "http://localhost:2379",
+    },
+    tags = ["manual"],  # Requires etcd binary to be installed
+)

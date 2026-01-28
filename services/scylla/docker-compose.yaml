@@ -1,0 +1,21 @@
+version: "3"
+
+services:
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: scylla-itest
+    ports:
+      - "9042:9042"
+    volumes:
+      - "${HOME}/var/scylla-itest:/var/lib/scylla"
+    command: >
+      --smp 1
+      --memory 512M
+      --overprovisioned 1
+      --developer-mode 1
+      --skip-wait-for-gossip-to-settle 0
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "quit"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
