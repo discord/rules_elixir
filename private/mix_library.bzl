@@ -70,7 +70,7 @@ def _mix_library_impl(ctx):
     #  - confirm if we need a secondary one of these for non-runtime deps
     #    (or maybe we just construct a combination classpath?)
     erl_libs_path = ""
-    if len(erl_libs_files) > 0:
+    if erl_libs_files:
         erl_libs_path = path_join(
             ctx.bin_dir.path,
             ctx.label.workspace_root,
@@ -93,33 +93,23 @@ def _mix_library_impl(ctx):
     priv_copy_commands = ""
     priv_copy_to_build_dir = ""
     if priv_dir:
-        # Commands to copy priv files to build directory (for Mix to access during compilation)
-        priv_copy_to_build_dir = "\n# Copy priv files to build directory for Mix access\n"
-        for priv_file in ctx.files.priv:
-            rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
-            priv_copy_to_build_dir += "    mkdir -p \"priv/$(dirname {})\"\n".format(rel_path)
-            # Only copy if source and destination are different (avoid "same file" errors)
-            priv_copy_to_build_dir += "    if [[ \"$ORIG_PWD/{}\" != \"$(pwd)/priv/{}\" ]]; then\n".format(
-                priv_file.path,
-                rel_path
-            )
-            priv_copy_to_build_dir += "        cp -L \"$ORIG_PWD/{}\" \"priv/{}\"\n".format(
-                priv_file.path,
-                rel_path
-            )
-            priv_copy_to_build_dir += "    fi\n"
-
-        # Commands to copy priv files to output directory (for ErlangAppInfo provider)
-        priv_copy_commands = "\n# Copy priv files to output directory preserving directory structure\n"
-        priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR\"\n"
+        build_dir_cmds = []
+        output_dir_cmds = []
 
         for priv_file in ctx.files.priv:
             rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
-            priv_copy_commands += "mkdir -p \"$ABS_OUT_PRIV_DIR/$(dirname {})\"\n".format(rel_path)
-            priv_copy_commands += "cp -L \"$ORIG_PWD/{}\" \"$ABS_OUT_PRIV_DIR/{}\"\n".format(
-                priv_file.path,
-                rel_path
-            )
+            src_path = priv_file.path
+
+            # Commands to copy priv files to build directory (for Mix to access during compilation)
+            build_dir_cmds.append('mkdir -p "priv/$(dirname {})"'.format(rel_path))
+            build_dir_cmds.append('cp -L "$ORIG_PWD/{}" "priv/{}"'.format(src_path, rel_path))
+
+            # Commands to copy priv files to output directory (for ErlangAppInfo provider)
+            output_dir_cmds.append('mkdir -p "$ABS_OUT_PRIV_DIR/$(dirname {})"'.format(rel_path))
+            output_dir_cmds.append('cp -L "$ORIG_PWD/{}" "$ABS_OUT_PRIV_DIR/{}"'.format(src_path, rel_path))
+
+        priv_copy_to_build_dir = "\n# Copy priv files to build directory for Mix access\n" + "\n".join(build_dir_cmds) + "\n"
+        priv_copy_commands = "\n# Copy priv files to output directory preserving directory structure\nmkdir -p \"$ABS_OUT_PRIV_DIR\"\n" + "\n".join(output_dir_cmds) + "\n"
 
     # TODO: confirm if we need to use include dir from other modules, or if
     # that's just a way for elixir to expose and interface to erlang.
@@ -153,7 +143,7 @@ cd "{build_dir}"
 # This makes them available to Mix tasks, NIFs, etc. during compilation
 if [[ -n "{priv_out_dir}" ]]; then
     mkdir -p priv
-{priv_copy_to_build_dir}
+    {priv_copy_to_build_dir}
 fi
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
@@ -171,7 +161,7 @@ if [[ -n "$ERL_LIBS_PATH" ]]; then
     done
 fi
 
-MIX_ENV=prod \\
+MIX_ENV={mix_env} \\
     MIX_BUILD_ROOT=_output \\
     MIX_HOME=/tmp \\
     MIX_OFFLINE=true \\
@@ -190,7 +180,7 @@ mkdir -p "$ABS_OUT_DIR"
 
 # NOTE: this directory can contain files other than .app and .beam, but we only
 # want to keep these in our build output.
-cp _output/prod/lib/{app_name}/ebin/*.beam _output/prod/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
+cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
 
 # Set priv output directory if priv files exist
 if [[ -n "{priv_out_dir}" ]]; then
@@ -210,6 +200,7 @@ fi
         erl_libs_path = erl_libs_path,
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
+        mix_env = ctx.attr.mix_env,
         # env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
@@ -252,6 +243,7 @@ fi
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
             mix_config = ctx.file.mix_config,
+            mix_env = ctx.attr.mix_env,
             # ebin = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'ebin']),
             # TODO: should we actually keep this, or should be just YEET the
             # consolidated directory? it seems only have dependencies
@@ -293,6 +285,11 @@ mix_library = rule(
     implementation = _mix_library_impl,
     attrs = {
         "app_name": attr.string(),
+        "mix_env": attr.string(
+            default = "prod",
+            values = ["prod", "test", "dev"],
+            doc = "The MIX_ENV to use when compiling (default: prod)",
+        ),
         "mix_config": attr.label(
             allow_single_file = [".exs"],
             default = ":mix.exs",

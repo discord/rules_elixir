@@ -5,11 +5,24 @@ load("@rules_erlang//:escript.bzl", "escript_archive")
 load("@rules_elixir//:mix_library.bzl", "mix_library")  # , "mix_release")
 load("@rules_elixir//:mix_test.bzl", "mix_test")
 
+# Production library
 mix_library(
     name = "lib",
     # TODO: we should generate this target, and elicit this name from the mix
     # configuration
     app_name = "plug_sample",
+    mix_config = ":mix.exs",
+    srcs = glob(['lib/**/*.ex']),
+    deps = [
+        "@plug_cryptoasdasd//:plug_crypto"
+    ],
+)
+
+# Test library (compiled with MIX_ENV=test)
+mix_library(
+    name = "lib_test",
+    app_name = "plug_sample",
+    mix_env = "test",
     mix_config = ":mix.exs",
     srcs = glob(['lib/**/*.ex']),
     deps = [
@@ -43,13 +56,11 @@ mix_library(
 #     command_line_args = ["--no-halt"],
 # )
 
+# Test runner using pre-compiled artifacts
 mix_test(
     name = "plug_sample_test",
-    mix_config = ":mix.exs",
-    data = glob(['lib/**/*.ex', 'test/**/*.exs']),
-    deps = [
-        "@plug_cryptoasdasd//:plug_crypto"
-    ],
+    lib = ":lib_test",
+    srcs = glob(['test/**/*.exs']), # This is optional
     env = {
         "ERL_COMPILER_OPTIONS": "deterministic",
         "ELIXIR_ERL_OPTIONS": "+fnu",

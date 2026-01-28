@@ -8,21 +8,34 @@ load(
     "erlang_dirs",
     "maybe_install_erlang",
 )
+load("//private:mix_info.bzl", "MixProjectInfo")
 
 def _mix_test_impl(ctx):
+    # Get providers from the lib dependency
+    lib_erlang_info = ctx.attr.lib[ErlangAppInfo]
+    lib_mix_info = ctx.attr.lib[MixProjectInfo]
+
+    # Validate that lib was compiled with mix_env="test"
+    if lib_mix_info.mix_env != "test":
+        fail("mix_test requires a mix_library compiled with mix_env='test'. " +
+             "Target '{}' was compiled with mix_env='{}'. ".format(ctx.attr.lib.label, lib_mix_info.mix_env) +
+             "Create a separate mix_library with mix_env='test' for testing.")
+
+    app_name = lib_erlang_info.app_name
+    mix_config = lib_mix_info.mix_config
+
+    # Get the ebin directory from the library
+    lib_beam_dirs = lib_erlang_info.beam  # List containing the ebin directory
+    lib_priv_dirs = lib_erlang_info.priv  # List containing the priv directory (if any)
+
+    # Build ERL_LIBS for all dependencies (excluding the lib itself)
     erl_libs_dir = ctx.label.name + "_deps"
+    lib_deps = lib_erlang_info.deps
 
     erl_libs_files = erl_libs_contents(
         ctx,
         dir = erl_libs_dir,
-        deps = flat_deps(ctx.attr.deps),
-        # NOTE: even though we provide `ez_deps` here, these don't actually
-        # correctly get added to our necessary include path. We explicitly set
-        # MIX_ARCHIVES later to placate mix here.
-        # TODO: improve this? it would be nice if we didn't have to do
-        # explicit further handling for .ez files.
-        ez_deps = ctx.files.ez_deps,
-        expand_ezs = False,
+        deps = lib_deps,
     )
 
     package = ctx.label.package
@@ -39,9 +52,29 @@ def _mix_test_impl(ctx):
     output = ctx.actions.declare_file(ctx.label.name)
 
     # Build test path arguments if specific test files are provided
+    # Strip package prefix since we cd into the package directory
     test_paths = ""
     if ctx.files.srcs:
-        test_paths = " ".join([s.short_path for s in ctx.files.srcs])
+        paths = []
+        for s in ctx.files.srcs:
+            # Remove package prefix from path since we cd into package dir
+            if package and s.short_path.startswith(package + "/"):
+                relative_path = s.short_path[len(package) + 1:]
+                paths.append(relative_path)
+            else:
+                paths.append(s.short_path)
+        test_paths = " ".join(paths)
+
+    # Get the path to the lib's ebin directory
+    # lib_beam_dirs is a list of File objects (directories)
+    lib_ebin_path = ""
+    if lib_beam_dirs:
+        lib_ebin_path = lib_beam_dirs[0].short_path
+
+    # Get the path to the lib's priv directory (if any)
+    lib_priv_path = ""
+    if lib_priv_dirs:
+        lib_priv_path = lib_priv_dirs[0].short_path
 
     script = """\
 #!/usr/bin/env bash
@@ -60,7 +93,7 @@ cd "$TEST_SRCDIR/$TEST_WORKSPACE/{package}"
 
 # Set up ERL_LIBS for dependencies
 ERL_LIBS_PATH=""
-if [[ -n "$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}" && -d "$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}" ]]; then
+if [[ -n "{erl_libs_path}" && -d "$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}" ]]; then
     ERL_LIBS_PATH="$(realpath $TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path})"
 fi
 export ERL_LIBS="$ERL_LIBS_PATH"
@@ -73,46 +106,62 @@ export MIX_ENV=test
 
 {setup}
 
-# Build -pa options for each dependency's ebin directory
-PA_OPTIONS=""
+# Set up _build directory structure with pre-compiled artifacts
+# This makes Mix think the project is already compiled
+mkdir -p _build/test/lib/{app_name}/ebin
+
+# Copy pre-compiled .beam and .app files from the mix_library
+LIB_EBIN_PATH="$TEST_SRCDIR/$TEST_WORKSPACE/{lib_ebin_path}"
+if [[ -d "$LIB_EBIN_PATH" ]]; then
+    cp -r "$LIB_EBIN_PATH"/* _build/test/lib/{app_name}/ebin/
+fi
+
+# Copy priv directory if it exists
+if [[ -n "{lib_priv_path}" ]]; then
+    LIB_PRIV_PATH="$TEST_SRCDIR/$TEST_WORKSPACE/{lib_priv_path}"
+    if [[ -d "$LIB_PRIV_PATH" ]]; then
+        mkdir -p _build/test/lib/{app_name}/priv
+        cp -r "$LIB_PRIV_PATH"/* _build/test/lib/{app_name}/priv/
+    fi
+fi
+
+# Set up dependency directories and build PA_OPTIONS in a single pass
+PA_OPTIONS="-pa _build/test/lib/{app_name}/ebin"
 if [[ -n "$ERL_LIBS_PATH" ]]; then
     for app_dir in "$ERL_LIBS_PATH"/*; do
+        app_basename=$(basename "$app_dir")
+        # Copy ebin directory and add to PA_OPTIONS
         if [[ -d "$app_dir/ebin" ]]; then
+            mkdir -p "_build/test/lib/$app_basename/ebin"
+            cp -r "$app_dir/ebin"/* "_build/test/lib/$app_basename/ebin/"
             PA_OPTIONS="$PA_OPTIONS -pa $app_dir/ebin"
+        fi
+        # Copy priv directory if present
+        if [[ -d "$app_dir/priv" ]]; then
+            mkdir -p "_build/test/lib/$app_basename/priv"
+            cp -r "$app_dir/priv"/* "_build/test/lib/$app_basename/priv/"
         fi
     done
 fi
 
-# Compile the project first (similar to mix_library)
-mkdir -p _build
+# Run mix test with --no-compile to use pre-compiled artifacts
+# Note: test/*.exs files are still compiled on-the-fly by ExUnit (this is by design)
 MIX_ENV=test \\
     MIX_BUILD_ROOT=_build \\
     MIX_HOME=/tmp \\
     MIX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
-
-# Run mix test
-set -x
-MIX_ENV=test \\
-    MIX_BUILD_ROOT=_build \\
-    MIX_HOME=/tmp \\
-    MIX_OFFLINE=true \\
-    ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
-    ERL_LIBS="$ERL_LIBS_PATH" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-start --no-deps-check {test_paths} {mix_test_opts} \\
-    | tee "${{TEST_UNDECLARED_OUTPUTS_DIR}}/test.log"
-set +x
-
-# Verify tests passed (no failures)
-tail -n 10 "${{TEST_UNDECLARED_OUTPUTS_DIR}}/test.log" | grep -E --silent "0 failures"
+    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile --no-start --no-deps-check {test_paths} {mix_test_opts}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
         package = package,
+        app_name = app_name,
+        lib_ebin_path = lib_ebin_path,
+        lib_priv_path = lib_priv_path,
         env = env,
         setup = ctx.attr.setup,
         test_paths = test_paths,
@@ -124,15 +173,21 @@ tail -n 10 "${{TEST_UNDECLARED_OUTPUTS_DIR}}/test.log" | grep -E --silent "0 fai
         content = script,
     )
 
-    # Include mix.exs and any additional data files in runfiles
+    # Collect all files needed at runtime
+    lib_files = []
+    for beam_dir in lib_beam_dirs:
+        lib_files.append(beam_dir)
+    for priv_dir in lib_priv_dirs:
+        lib_files.append(priv_dir)
+
     runfiles = erlang_runfiles.merge(elixir_runfiles)
     runfiles = runfiles.merge_all(
         [
             ctx.runfiles(
                 ctx.files.srcs +
-                ctx.files.data +
                 erl_libs_files +
-                ([ctx.file.mix_config] if ctx.file.mix_config else [])
+                lib_files +
+                [mix_config]
             ),
         ] + [
             tool[DefaultInfo].default_runfiles
@@ -148,26 +203,14 @@ tail -n 10 "${{TEST_UNDECLARED_OUTPUTS_DIR}}/test.log" | grep -E --silent "0 fai
 mix_test = rule(
     implementation = _mix_test_impl,
     attrs = {
-        "mix_config": attr.label(
-            allow_single_file = [".exs"],
-            default = ":mix.exs",
-            doc = "The mix.exs configuration file for the project",
+        "lib": attr.label(
+            mandatory = True,
+            providers = [ErlangAppInfo, MixProjectInfo],
+            doc = "The mix_library target containing compiled application (must have mix_env='test')",
         ),
         "srcs": attr.label_list(
-            allow_files = [".ex", ".exs"],
-            doc = "Optional list of specific test files to run. If empty, runs all tests.",
-        ),
-        "data": attr.label_list(
-            allow_files = True,
-            doc = "Additional data files needed for tests",
-        ),
-        "deps": attr.label_list(
-            providers = [ErlangAppInfo],
-            doc = "Dependencies required for the tests",
-        ),
-        "ez_deps": attr.label_list(
-            allow_files = [".ez"],
-            doc = "Erlang/Elixir archive dependencies",
+            allow_files = [".exs"],
+            doc = "Test files to include in runfiles and optionally run. If specific files are provided, only those tests are run. If empty, all discovered tests are run.",
         ),
         "tools": attr.label_list(
             cfg = "target",

@@ -3,7 +3,9 @@ load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
 load("@rules_elixir//:mix_library.bzl", "mix_library")  # , "mix_release")
+load("@rules_elixir//:mix_test.bzl", "mix_test")
 
+# Production library
 mix_library(
     name = "basic",
     # TODO: we should generate this target, and elicit this name from the mix
@@ -11,6 +13,26 @@ mix_library(
     app_name = "main",
     mix_config = ":mix.exs",
     srcs = glob(['lib/**/*.ex']),
+)
+
+# Test library (compiled with MIX_ENV=test)
+mix_library(
+    name = "basic_test_lib",
+    app_name = "main",
+    mix_env = "test",
+    mix_config = ":mix.exs",
+    srcs = glob(['lib/**/*.ex']),
+)
+
+# Test runner using pre-compiled artifacts
+mix_test(
+    name = "basic_test",
+    lib = ":basic_test_lib",
+    srcs = glob(['test/**/*.exs']),
+    env = {
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "ELIXIR_ERL_OPTIONS": "+fnu",
+    },
 )
 
 # TODO: Migrate to elixir_release + elixir_release_bundle
