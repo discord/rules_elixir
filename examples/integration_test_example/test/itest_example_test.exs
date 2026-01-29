@@ -7,7 +7,6 @@ defmodule ItestExampleTest do
   These tests verify that:
   1. Services are started before tests run
   2. Environment variables are properly exported for service endpoints
-  3. Services are cleaned up after tests complete
   """
 
   describe "environment variables from services" do

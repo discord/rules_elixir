@@ -92,8 +92,6 @@ def topological_sort_services(services):
                 in_degree[service.name] = in_degree[service.name] + 1
                 dependents[dep.name] = dependents[dep.name] + [service.name]
 
-    # Kahn's algorithm using for loop (Starlark doesn't support while)
-    # We know max iterations is len(services)
     result = []
     queue = [name for name, degree in in_degree.items() if degree == 0]
 

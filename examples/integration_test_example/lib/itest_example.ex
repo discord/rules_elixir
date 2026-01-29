@@ -13,11 +13,4 @@ defmodule ItestExample do
       {:error, reason} -> {:error, reason}
     end
   end
-
-  @doc """
-  Get environment variable or default.
-  """
-  def get_env(name, default \\ nil) do
-    System.get_env(name) || default
-  end
 end

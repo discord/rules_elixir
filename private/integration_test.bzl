@@ -31,7 +31,7 @@ def _generate_service_orchestration(services):
     """Generate shell script code for service orchestration.
 
     Args:
-        services: List of ServiceInfo providers (already topologically sorted)
+        services: List of ServiceInfo providers already topologically sorted
 
     Returns:
         Tuple of (setup_code, cleanup_code, env_exports)
@@ -207,9 +207,10 @@ echo "[itest] All services started successfully"
 '''
 
     setup_code = "\n".join(config_lines) + service_functions + "\n# Set up cleanup trap\ntrap stop_all_services EXIT\n" + startup_code
+    cleanup_code = "\n" + "stop_all_services"
     env_exports = "\n".join(env_exports_lines)
 
-    return (setup_code, "", env_exports)
+    return (setup_code, cleanup_code, env_exports)
 
 def _mix_integration_test_impl(ctx):
     """Implementation of the mix_integration_test rule."""

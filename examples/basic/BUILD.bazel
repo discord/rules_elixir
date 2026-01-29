@@ -36,6 +36,23 @@ mix_test(
     },
 )
 
+# Example integration test using the integration testing framework
+# This demonstrates how to use mix_integration_test with services
+mix_integration_test(
+    name = "integration_test_example",
+    lib = ":basic_test_lib",
+    srcs = glob(["test/**/*.exs"]),
+    services = [
+        "//services:etcd",
+    ],
+    env = {
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "ELIXIR_ERL_OPTIONS": "+fnu",
+        "ETCD_URL": "http://localhost:2379",
+    },
+    tags = ["manual"],
+)
+
 # TODO: Migrate to elixir_release + elixir_release_bundle
 # The new approach uses:
 #   1. elixir_release to create the release with Elixir-specific processing
@@ -113,19 +130,4 @@ mix_test(
 #     },
 # )
 
-# Example integration test using the integration testing framework
-# This demonstrates how to use mix_integration_test with services
-mix_integration_test(
-    name = "integration_test_example",
-    lib = ":basic_test_lib",
-    srcs = glob(["test/**/*.exs"]),
-    services = [
-        "//services:etcd",
-    ],
-    env = {
-        "ERL_COMPILER_OPTIONS": "deterministic",
-        "ELIXIR_ERL_OPTIONS": "+fnu",
-        "ETCD_URL": "http://localhost:2379",
-    },
-    tags = ["manual"],  # Don't run automatically, requires etcd binary
-)
+
