@@ -18,7 +18,7 @@ Usage:
     )
 """
 
-load("//:service.bzl", "dbx_service", "dbx_service_group")
+load("//:service.bzl", "itest_service", "itest_service_group")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -26,7 +26,7 @@ package(default_visibility = ["//visibility:public"])
 # etcd - Distributed key-value store for service discovery and configuration
 # ============================================================================
 
-dbx_service(
+itest_service(
     name = "etcd",
     command = "./services/etcd/start_etcd.sh",
     data = ["etcd/start_etcd.sh"],
@@ -51,7 +51,7 @@ dbx_service(
 # scylla - Cassandra-compatible database (runs via Docker)
 # ============================================================================
 
-dbx_service(
+itest_service(
     name = "scylla",
     command = "./services/scylla/start_scylla.sh",
     data = [
@@ -71,7 +71,7 @@ dbx_service(
 # confy - Configuration service (depends on etcd)
 # ============================================================================
 
-dbx_service(
+itest_service(
     name = "confy",
     command = "./services/confy/start_confy.sh",
     data = ["confy/start_confy.sh"],
@@ -95,7 +95,7 @@ dbx_service(
 # ============================================================================
 
 # Basic infrastructure services (etcd + scylla)
-dbx_service_group(
+itest_service_group(
     name = "base_services",
     services = [
         ":etcd",
@@ -104,7 +104,7 @@ dbx_service_group(
 )
 
 # Full service stack including configuration
-dbx_service_group(
+itest_service_group(
     name = "full_services",
     services = [
         ":etcd",

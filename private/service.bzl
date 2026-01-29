@@ -1,4 +1,4 @@
-"Private implementation of the dbx_service rule."
+"Private implementation of the itest_service rule."
 
 load("@bazel_skylib//lib:shell.bzl", "shell")
 load(
@@ -25,8 +25,8 @@ def _parse_port_spec(port_spec):
     else:
         return (int(port_spec), "TCP")
 
-def _dbx_service_impl(ctx):
-    """Implementation of the dbx_service rule."""
+def _itest_service_impl(ctx):
+    """Implementation of the itest_service rule."""
 
     # Validate and process health check
     health_check = validate_health_check(ctx.attr.health_check)
@@ -137,8 +137,8 @@ exec {command}
         ),
     ]
 
-dbx_service = rule(
-    implementation = _dbx_service_impl,
+itest_service = rule(
+    implementation = _itest_service_impl,
     attrs = {
         "command": attr.string(
             mandatory = True,

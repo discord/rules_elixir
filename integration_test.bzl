@@ -73,7 +73,7 @@ def mix_integration_test(
     Args:
         name: Target name for this test
         lib: A mix_library target compiled with mix_env="test"
-        services: List of dbx_service targets to start before tests.
+        services: List of itest_service targets to start before tests.
             Services are started in dependency order.
         srcs: Test source files (.exs). If empty, all tests are run.
         data: Additional data files needed for tests

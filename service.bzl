@@ -1,14 +1,14 @@
 """Public API for defining services for integration testing.
 
-This module provides the `dbx_service` macro for defining services that can be
+This module provides the `itest_service` macro for defining services that can be
 started as dependencies for integration tests.
 
 Example usage:
 
 ```python
-load("@discord_rules_elixir//:service.bzl", "dbx_service")
+load("@discord_rules_elixir//:service.bzl", "itest_service")
 
-dbx_service(
+itest_service(
     name = "etcd",
     command = "etcd --enable-v2 -data-dir=$HOME/var/etcd",
     ports = [{"port": "2379", "protocol": "TCP"}],
@@ -22,13 +22,13 @@ dbx_service(
 ```
 """
 
-load("//private:service.bzl", _dbx_service = "dbx_service")
+load("//private:service.bzl", _itest_service = "itest_service")
 load("//private:service_info.bzl", _ServiceInfo = "ServiceInfo")
 
 # Re-export for external use
 ServiceInfo = _ServiceInfo
 
-def dbx_service(
+def itest_service(
         name,
         command,
         ports = [],
@@ -56,7 +56,7 @@ def dbx_service(
         health_check: Optional health check configuration dict:
             - HTTP check: {"type": "http", "route": "/health", "port": "8080", "max_seconds": "60"}
             - Command check: {"type": "command", "command": "curl localhost:8080", "max_seconds": "60"}
-        deps: List of other dbx_service targets this service depends on.
+        deps: List of other itest_service targets this service depends on.
             Dependencies are started first.
         env: Dict of environment variables to set when running the service.
         data: Data files needed at runtime.
@@ -82,7 +82,7 @@ def dbx_service(
     if health_check:
         normalized_health_check = {k: str(v) for k, v in health_check.items()}
 
-    _dbx_service(
+    _itest_service(
         name = name,
         command = command,
         ports = normalized_ports,
@@ -96,7 +96,7 @@ def dbx_service(
         **kwargs
     )
 
-def dbx_service_group(
+def itest_service_group(
         name,
         services,
         visibility = None):
@@ -107,7 +107,7 @@ def dbx_service_group(
 
     Args:
         name: Target name for this service group
-        services: List of dbx_service targets to include in this group
+        services: List of itest_service targets to include in this group
         visibility: Standard Bazel visibility
     """
     native.filegroup(
