@@ -4,7 +4,6 @@ load("@rules_erlang//:escript.bzl", "escript_archive")
 
 load("@rules_elixir//:mix_library.bzl", "mix_library")  # , "mix_release")
 load("@rules_elixir//:mix_test.bzl", "mix_test")
-load("@rules_elixir//:integration_test.bzl", "mix_integration_test")
 
 # Production library
 mix_library(
@@ -36,22 +35,9 @@ mix_test(
     },
 )
 
-# Example integration test using the integration testing framework
-# This demonstrates how to use mix_integration_test with services
-mix_integration_test(
-    name = "integration_test_example",
-    lib = ":basic_test_lib",
-    srcs = glob(["test/**/*.exs"]),
-    services = [
-        "//services:etcd",
-    ],
-    env = {
-        "ERL_COMPILER_OPTIONS": "deterministic",
-        "ELIXIR_ERL_OPTIONS": "+fnu",
-        "ETCD_URL": "http://localhost:2379",
-    },
-    tags = ["manual"],
-)
+# For integration test examples using mix_service_test, see:
+# //discord/bazel/itest/elixir_itest_helpers:etcd_test
+# //discord/bazel/itest/elixir_itest_helpers:postgres_test
 
 # TODO: Migrate to elixir_release + elixir_release_bundle
 # The new approach uses:
