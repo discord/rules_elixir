@@ -58,11 +58,14 @@ mix_library(
         for dep in mod.tags.hex_package:
             if dep.build_file and dep.build_file_content:
                 fail("build_file and build_file_content cannot be set simultaneously for {}".format(dep.name))
+            if dep.sha256 and dep.integrity:
+                fail("sha256 and integrity are mutually exclusive for {}".format(dep.name))
             packages.append({
                 "name": dep.name,
                 "pkg": dep.pkg,
                 "version": dep.version,
                 "sha256": dep.sha256,
+                "integrity": dep.integrity,
                 "build_file": dep.build_file,
                 "build_file_content": dep.build_file_content,
                 "patches": dep.patches,
@@ -94,6 +97,7 @@ mix_library(
             pkg = pkg["pkg"],
             version = pkg["version"],
             sha256 = pkg["sha256"],
+            integrity = pkg["integrity"],
             build_file = pkg["build_file"],
             build_file_content = pkg["build_file_content"],
             patches = pkg["patches"],
