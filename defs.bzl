@@ -5,7 +5,8 @@ load("//private:mix_test.bzl", _mix_test = "mix_test")
 def mix_library(*args, **kwargs):
     deps = kwargs.pop("deps", [])
     if kwargs.get("app_name") != "hex":
-        deps.append("@hex_pm//:lib")
+        deps.append(Label("@hex_pm//:lib"))
+    kwargs['deps'] = deps
     _mix_library(*args, **kwargs)
 
 def mix_release(*args, **kwargs):
