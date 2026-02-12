@@ -85,7 +85,7 @@ cd {build_dir}
 export MIX_OS_CONCURRENCY_LOCK=false
 
 # TODO: we should probably consolidate these somewhere?
-export MIX_OFFLINE=true
+export HEX_OFFLINE=true
 
 
 mkdir -p "$OUTPUT_DIR/{env}/lib"

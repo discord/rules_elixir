@@ -162,7 +162,7 @@ fi
 MIX_ENV={mix_env} \\
     MIX_BUILD_ROOT=_output \\
     MIX_HOME=/tmp \\
-    MIX_OFFLINE=true \\
+    HEX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps

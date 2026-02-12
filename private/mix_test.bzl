@@ -149,7 +149,7 @@ fi
 MIX_ENV=test \\
     MIX_BUILD_ROOT=_build \\
     MIX_HOME=/tmp \\
-    MIX_OFFLINE=true \\
+    HEX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile --no-start --no-deps-check {test_paths} {mix_test_opts}

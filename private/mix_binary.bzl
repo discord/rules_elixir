@@ -73,7 +73,7 @@ mkdir _output
 export MIX_OS_CONCURRENCY_LOCK=false
 
 # TODO: we should probably consolidate these somewhere?
-export MIX_OFFLINE=true
+export HEX_OFFLINE=true
 
 # Build -pa options for each dependency's ebin directory
 ERL_LIBS_PATH="{erl_libs_path}"
