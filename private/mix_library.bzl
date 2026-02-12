@@ -78,12 +78,10 @@ def _mix_library_impl(ctx):
             erl_libs_dir,
         )
 
-    # TODO: do we want to expose env vars here?
-    env = ""
-    # env = "\n".join([
-    #     "export {}={}".format(k, v)
-    #     for k, v in ctx.attr.env.items()
-    # ])
+    env = "\n".join([
+        "export {}={}".format(k, v)
+        for k, v in ctx.attr.env.items()
+    ])
 
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
@@ -201,7 +199,7 @@ fi
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
         mix_env = ctx.attr.mix_env,
-        # env = env,
+        env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
         priv_out_dir = priv_dir.path if priv_dir else "",
@@ -290,6 +288,7 @@ mix_library = rule(
             values = ["prod", "test", "dev"],
             doc = "The MIX_ENV to use when compiling (default: prod)",
         ),
+        "env": attr.string_dict(),
         "mix_config": attr.label(
             allow_single_file = [".exs"],
             default = ":mix.exs",
