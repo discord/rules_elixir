@@ -38,15 +38,50 @@ elixir_packages = use_extension(
     "elixir_packages",
 )
 
+# These two manually-managed packages are necessary to bootstrap hex
+# (configured in `bzlmod/private/elixir_packages.bzl)
+# "Why do we build hex if we're not going to use it to manage 3p packages",
+# do I hear you ask?
+# It turns out that mix depends on hex to determine if missing packages are
+# needed, which is the case for dependencies only used at dev or test time. If
+# we do not bootstrap hex ourselves and provide it at compile time, mix will
+# throw an error upon encountering any dev- or test-only packages that aren't
+# explicitly provided as `deps`.
 elixir_packages.hex_package(
     name = "jason",
     version = "1.4.4",
     sha256 = "c5eb0cab91f094599f94d55bc63409236a8ec69a21a67814529e8d5f6cc90b3b",
-    # build_file = "//:jason.BUILD.bazel",
+    build_file_content = """
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+
+elixir_app(
+    srcs = glob(["lib/**/*.ex"]),
+    app_name = "jason",
+    app_version = "1.4.4",
+    visibility = ["//visibility:public"],
+)
+""",
+)
+
+elixir_packages.hex_package(
+    name = "decimal",
+    version = "2.3.0",
+    sha256 = "a4d66355cb29cb47c3cf30e71329e58361cfcb37c34235ef3bf1d7bf3773aeac",
+    build_file_content = """
+load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+
+elixir_app(
+    srcs = glob(["lib/**/*.ex"]),
+    app_name = "decimal",
+    app_version = "2.3.0",
+    visibility = ["//visibility:public"],
+)
+""",
 )
 
 use_repo(
     elixir_packages,
     "hex_pm",
     "jason",
+    "decimal",
 )
