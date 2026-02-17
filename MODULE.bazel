@@ -11,7 +11,6 @@ bazel_dep(
     name = "rules_erlang",
     version = "3.16.0",
 )
-
 archive_override(
     module_name = "rules_erlang",
     integrity = "sha256-Gg1A/QyTHsHarL0EAOLhe2nTHlcnVngJLBZukcGvaOw=",
@@ -49,8 +48,6 @@ elixir_packages = use_extension(
 # explicitly provided as `deps`.
 elixir_packages.hex_package(
     name = "jason",
-    version = "1.4.4",
-    sha256 = "c5eb0cab91f094599f94d55bc63409236a8ec69a21a67814529e8d5f6cc90b3b",
     build_file_content = """
 load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 
@@ -61,12 +58,11 @@ elixir_app(
     visibility = ["//visibility:public"],
 )
 """,
+    sha256 = "c5eb0cab91f094599f94d55bc63409236a8ec69a21a67814529e8d5f6cc90b3b",
+    version = "1.4.4",
 )
-
 elixir_packages.hex_package(
     name = "decimal",
-    version = "2.3.0",
-    sha256 = "a4d66355cb29cb47c3cf30e71329e58361cfcb37c34235ef3bf1d7bf3773aeac",
     build_file_content = """
 load("@rules_elixir//:elixir_app.bzl", "elixir_app")
 
@@ -77,11 +73,12 @@ elixir_app(
     visibility = ["//visibility:public"],
 )
 """,
+    sha256 = "a4d66355cb29cb47c3cf30e71329e58361cfcb37c34235ef3bf1d7bf3773aeac",
+    version = "2.3.0",
 )
-
 use_repo(
     elixir_packages,
+    "decimal",
     "hex_pm",
     "jason",
-    "decimal",
 )
