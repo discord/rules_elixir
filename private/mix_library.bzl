@@ -79,7 +79,7 @@ def _mix_library_impl(ctx):
         )
 
     env = "\n".join([
-        "export {}={}".format(k, v)
+        "export {}={}".format(k, ctx.expand_location(v, ctx.attr.data))
         for k, v in ctx.attr.env.items()
     ])
 
@@ -159,6 +159,7 @@ if [[ -n "$ERL_LIBS_PATH" ]]; then
     done
 fi
 
+{env}
 MIX_ENV={mix_env} \\
     MIX_BUILD_ROOT=_output \\
     MIX_HOME=/tmp \\
