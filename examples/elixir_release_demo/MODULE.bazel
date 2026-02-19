@@ -18,9 +18,9 @@ local_path_override(
 
 archive_override(
     module_name = "rules_erlang",
-    integrity = "sha256-TGBm/CzhpUcoafLD+WHqtIs7895u6GeVJFaskQkcjsY=",
-    strip_prefix = "rules_erlang-581146252d2cd5a1c373738880afb9746ec735bb/",
-    url = "https://github.com/rabbitmq/rules_erlang/archive/581146252d2cd5a1c373738880afb9746ec735bb.tar.gz",
+    integrity = "sha256-Gg1A/QyTHsHarL0EAOLhe2nTHlcnVngJLBZukcGvaOw=",
+    strip_prefix = "rules_erlang-b4b01911b99944fa0c9efb66bf3d9030ee784fa9/",
+    url = "https://github.com/discord/rules_erlang/archive/b4b01911b99944fa0c9efb66bf3d9030ee784fa9.tar.gz",
 )
 
 # Test the elixir_packages extension with a simple package

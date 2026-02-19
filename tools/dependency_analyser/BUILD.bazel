@@ -1,6 +1,6 @@
 # NOTE: this rule specifically *does not* use mix, allowing us to use it to
 # bootstrap rules_elixir
-load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_elixir//:defs.bzl", "elixir_app")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
 package(default_visibility = [ "//visibility:public"])

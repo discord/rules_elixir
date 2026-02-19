@@ -1,4 +1,4 @@
-load("@rules_elixir//:mix_library.bzl", "mix_library")
+load("@rules_elixir//:defs.bzl", "mix_library")
 
 mix_library(
     name = "erlang_app",

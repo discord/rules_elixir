@@ -49,7 +49,7 @@ elixir_packages = use_extension(
 elixir_packages.hex_package(
     name = "jason",
     build_file_content = """
-load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_elixir//:defs.bzl", "elixir_app")
 
 elixir_app(
     srcs = glob(["lib/**/*.ex"]),
@@ -64,7 +64,7 @@ elixir_app(
 elixir_packages.hex_package(
     name = "decimal",
     build_file_content = """
-load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_elixir//:defs.bzl", "elixir_app")
 
 elixir_app(
     srcs = glob(["lib/**/*.ex"]),

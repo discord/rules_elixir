@@ -1,9 +1,6 @@
-load("@rules_elixir//:elixir_app.bzl", "elixir_app")
-load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
-load("@rules_elixir//:mix_library.bzl", "mix_library")  # , "mix_release")
-load("@rules_elixir//:mix_test.bzl", "mix_test")
+load("@rules_elixir//:defs.bzl", "elixir_app", "ex_unit_test", "mix_library", "mix_test")
 
 # Production library
 mix_library(
@@ -14,7 +11,7 @@ mix_library(
     mix_config = ":mix.exs",
     srcs = glob(['lib/**/*.ex']),
     deps = [
-        "@plug_cryptoasdasd//:plug_crypto"
+        "@plug_crypto//:plug_crypto"
     ],
 )
 
@@ -26,7 +23,7 @@ mix_library(
     mix_config = ":mix.exs",
     srcs = glob(['lib/**/*.ex']),
     deps = [
-        "@plug_cryptoasdasd//:plug_crypto"
+        "@plug_crypto//:plug_crypto"
     ],
 )
 

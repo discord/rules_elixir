@@ -7,9 +7,11 @@ bazel_dep(
     name = "rules_erlang",
     version = "3.16.0",
 )
-local_path_override(
+archive_override(
     module_name = "rules_erlang",
-    path = "../../../rules_erlang",
+    integrity = "sha256-Gg1A/QyTHsHarL0EAOLhe2nTHlcnVngJLBZukcGvaOw=",
+    strip_prefix = "rules_erlang-b4b01911b99944fa0c9efb66bf3d9030ee784fa9/",
+    url = "https://github.com/discord/rules_erlang/archive/b4b01911b99944fa0c9efb66bf3d9030ee784fa9.tar.gz",
 )
 
 bazel_dep(
@@ -27,12 +29,12 @@ elixir_packages = use_extension(
     "elixir_packages",
 )
 elixir_packages.hex_package(
-    name = "plug_cryptoasdasd",
+    name = "plug_crypto",
     pkg = "plug_crypto",
     version = "2.1.1",
     sha256 = "6470bce6ffe41c8bd497612ffde1a7e4af67f36a15eea5f921af71cf3e11247c",
 )
 use_repo(
     elixir_packages,
-    "plug_cryptoasdasd",
+    "plug_crypto",
 )
