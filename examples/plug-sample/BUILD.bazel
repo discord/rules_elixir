@@ -1,8 +1,7 @@
 load("@rules_elixir//:elixir_app.bzl", "elixir_app")
-load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
-load("@rules_elixir//:defs.bzl", "mix_library", "mix_test")
+load("@rules_elixir//:defs.bzl", "ex_unit_test", "mix_library", "mix_test")
 
 # Production library
 mix_library(
