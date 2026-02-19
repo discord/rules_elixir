@@ -1,5 +1,4 @@
-load("@rules_elixir//:elixir_app.bzl", "elixir_app")
-load("@rules_elixir//:ex_unit_test.bzl", "ex_unit_test")
+load("@rules_elixir//:defs.bzl", "elixir_app", "ex_unit_test")
 load(
     "@rules_elixir//tools:elixir_vars.bzl",
     "ELIXIR_VARS_ENV_MAP",

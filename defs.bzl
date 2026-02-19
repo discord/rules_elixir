@@ -1,12 +1,20 @@
 load("//private:mix_library.bzl", _mix_library = "mix_library")
 load("//private:mix_release.bzl", _mix_release = "mix_release")
 load("//private:mix_test.bzl", _mix_test = "mix_test")
+load("//private:elixir_app.bzl", _elixir_app = "elixir_app")
 load(
     "//private:ex_unit_test.bzl",
     _ex_unit_test = "ex_unit_test",
 )
 
 def mix_library(*args, **kwargs):
+    """Compiles an Elixir library using Mix.
+
+    Automatically adds dependencies for hex unless the app_name is "hex",
+    because hex is required for mix to evaluate if a dev/runtime/test/etc
+    dependency is relevant in the current compilation context (even though
+    we invoke in offline mode)
+    """
     deps = kwargs.pop("deps", [])
     if kwargs.get("app_name") != "hex":
         deps.append(Label("@hex_pm//:lib"))
@@ -69,3 +77,6 @@ def ex_unit_test(**kwargs):
         }),
         **kwargs
     )
+
+def elixir_app(**kwargs):
+    _elixir_app(**kwargs)

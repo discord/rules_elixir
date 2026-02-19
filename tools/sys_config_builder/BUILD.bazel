@@ -1,7 +1,7 @@
 # Build configuration for sys_config_builder tool
 # This tool generates Erlang sys.config files with Elixir Config.Provider support
 
-load("@rules_elixir//:elixir_app.bzl", "elixir_app")
+load("@rules_elixir//:defs.bzl", "elixir_app")
 load("@rules_erlang//:escript.bzl", "escript_archive")
 
 package(default_visibility = ["//visibility:public"])
