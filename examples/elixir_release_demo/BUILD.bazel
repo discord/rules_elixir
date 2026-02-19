@@ -4,7 +4,7 @@ This example shows how to create Elixir releases using the new architecture
 that leverages rules_erlang_2 with Elixir-specific processing.
 """
 
-load("@rules_elixir//:mix_library.bzl", "mix_library")
+load("@rules_elixir//:defs.bzl", "mix_library")
 load("@rules_elixir//:eval_config.bzl", "eval_config")
 load("@rules_elixir//:protocol_consolidation.bzl", "consolidate_protocols_for_release")
 load("@rules_elixir//:sys_config.bzl", "elixir_sys_config")

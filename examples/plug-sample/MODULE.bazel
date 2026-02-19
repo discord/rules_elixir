@@ -27,12 +27,12 @@ elixir_packages = use_extension(
     "elixir_packages",
 )
 elixir_packages.hex_package(
-    name = "plug_cryptoasdasd",
+    name = "plug_crypto",
     pkg = "plug_crypto",
     version = "2.1.1",
     sha256 = "6470bce6ffe41c8bd497612ffde1a7e4af67f36a15eea5f921af71cf3e11247c",
 )
 use_repo(
     elixir_packages,
-    "plug_cryptoasdasd",
+    "plug_crypto",
 )
