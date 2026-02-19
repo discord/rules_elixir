@@ -53,9 +53,13 @@ def _mix_release_impl(ctx):
 
     # this has to be a label, instead of a string
     app_config_file = ctx.attr.application[MixProjectInfo].mix_config
-    files = [app_config_file]
+    extra_src_files = []
+    for src in ctx.attr.extra_srcs:
+        extra_src_files.extend(src[DefaultInfo].files.to_list())
+    files = [app_config_file] + extra_src_files
     if erlang_info.beam:
         files.extend(erlang_info.beam)
+
     runfiles = ctx.runfiles(files = files)
 
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
@@ -148,6 +152,7 @@ mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
         mnemonic = "MIXRELEASE",
     )
 
+    # TODO: confirm if we _actually_ need this
     ctx.actions.expand_template(
         template = ctx.file._template,
         output = ctx.outputs.executable,
@@ -165,9 +170,12 @@ mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
     # Create ReleaseInfo provider
     release_info = create_release_info(
         name = release_name,
+        # TODO: confirm if we can elide this from mix.exs instead of specifying
+        # it manually.
         version = ctx.attr.version,
         env = env,
         app_name = app_name,
+        # TODO: i think mix just gives us this for free?
         has_runtime_config = ctx.attr.sys_config != None if hasattr(ctx.attr, "sys_config") else False,
     )
 
@@ -190,6 +198,13 @@ mix_release = rule(
         "application": attr.label(
             providers = [MixProjectInfo, ErlangAppInfo],
             doc = "The Mix application to create a release for",
+        ),
+        "extra_srcs": attr.label_list(
+            # This is annoying, but because we need to evaluate mix.exs in
+            # `mix release`, and elixir lets you be *flexible* in these files
+            # we need to support adding arbitrary extra files to this step.
+            doc = "Extra...stuff that needs evaluation at release time.",
+            allow_files = True,
         ),
         "run_argument": attr.string(
             default = "start",
