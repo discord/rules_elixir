@@ -6,7 +6,33 @@ load(
     "//private:ex_unit_test.bzl",
     _ex_unit_test = "ex_unit_test",
 )
+load(
+    "//private:elixir_build.bzl",
+    _elixir_build = "elixir_build",
+    _elixir_external = "elixir_external",
+)
+load("//private:elixir_release.bzl", _elixir_release = "elixir_release")
+load("//private:elixir_release_bundle.bzl", _elixir_release_bundle = "elixir_release_bundle")
+load(
+    "//private:elixir_toolchain.bzl",
+    _elixir_toolchain = "elixir_toolchain",
+)
+load(
+    "//private:iex_eval.bzl",
+    _iex_eval = "iex_eval",
+)
+load(
+    "//private:protocol_consolidation.bzl",
+    _consolidate_protocols_for_release = "consolidate_protocols_for_release",
+    _elixir_protocol_consolidation = "elixir_protocol_consolidation",
+)
+load(
+    "//private:eval_config.bzl",
+    _eval_config = "eval_config",
+)
+load("//private:elixir_sys_config.bzl", _elixir_sys_config = "elixir_sys_config")
 
+# mix-backed targets. Generally fairly reliable, and set-and-forget.
 def mix_library(*args, **kwargs):
     """Compiles an Elixir library using Mix.
 
@@ -69,6 +95,35 @@ def mix_test(name, lib, srcs = None, **kwargs):
 
     _mix_test(name = name, lib = lib, srcs = srcs, **kwargs)
 
+# elixirc-backed targets. Generally sane, but are generally more fragile/prone
+# to requiring specifically-crafted BUILD files.
+# These will generally be faster than using their mix-equivalent counterparts,
+# but also do not support niceties like compile-time plugins
+def elixir_app(**kwargs):
+    return _elixir_app(**kwargs)
+
+def elixir_build(**kwargs):
+    return _elixir_build(**kwargs)
+
+def elixir_release(**kwargs):
+    return _elixir_release(**kwargs)
+
+def elixir_release_bundle(**kwargs):
+    """Public API for creating deployable Elixir release bundles.
+
+    The elixir_release_bundle rule takes an elixir_release and creates a complete,
+    deployable OTP release bundle with:
+    - Standard OTP directory structure (bin/, lib/, releases/, erts/)
+    - Startup scripts with multiple modes (start, console, foreground)
+    - Optional ERTS inclusion for self-contained deployments
+    - Consolidated protocols and runtime configuration support
+    - All application dependencies and private resources
+
+    The resulting bundle can be copied to a target system and run directly.
+    """
+    return _elixir_release_bundle(**kwargs)
+
+# Mixless unit test target
 def ex_unit_test(**kwargs):
     _ex_unit_test(
         is_windows = select({
@@ -78,5 +133,38 @@ def ex_unit_test(**kwargs):
         **kwargs
     )
 
-def elixir_app(**kwargs):
-    _elixir_app(**kwargs)
+# Targets for building and utilising elixir toolchains
+def elixir_external(**kwargs):
+    return _elixir_external(**kwargs)
+
+def elixir_toolchain(**kwargs):
+    return _elixir_toolchain(**kwargs)
+
+def iex_eval(**kwargs):
+    return _iex_eval(**kwargs)
+
+# Stdlib-only backed implementation of protocol consolidation. Redundant if
+# compiling with mix-backed targets.
+def elixir_protocol_consolidation(**kwargs):
+    return _elixir_protocol_consolidation(**kwargs)
+
+# Convenience macro for the above
+def consolidate_protocols_for_release(**kwargs):
+    return _consolidate_protocols_for_release(**kwargs)
+
+# Stdlib-only compilation of elixir configs
+def eval_config(**kwargs):
+    _eval_config(**kwargs)
+
+def elixir_sys_config(**kwargs):
+    """Public API for sys_config generation.
+
+    The elixir_sys_config rule generates Erlang sys.config files with support for:
+    - Compile-time configuration from config/*.exs files (via eval_config)
+    - Runtime configuration with Config.Provider support
+    - Automatic inference of environment, version, and paths
+    - Integration with Elixir releases
+
+    This rule bridges Elixir's Config system with OTP's sys.config format.
+    """
+    _elixir_sys_config(**kwargs)

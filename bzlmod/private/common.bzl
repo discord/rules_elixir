@@ -2,7 +2,7 @@
 DEFAULT_BUILD_FILE_CONTENT = """\
 package(default_visibility = ["//visibility:public"])
 
-load("@rules_elixir//:mix_library.bzl", "mix_library")
+load("@rules_elixir//:defs.bzl", "mix_library")
 
 # A little ugly, but lets us keep a relatively-consistent interface to
 # rules_erlang
