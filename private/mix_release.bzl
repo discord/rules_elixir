@@ -54,7 +54,7 @@ def _mix_release_impl(ctx):
     # this has to be a label, instead of a string
     app_config_file = ctx.attr.application[MixProjectInfo].mix_config
     extra_src_files = []
-    for src in ctx.attr.extra_srcs:
+    for src in ctx.attr.configs:
         extra_src_files.extend(src[DefaultInfo].files.to_list())
     files = [app_config_file] + extra_src_files
     if erlang_info.beam:
@@ -199,12 +199,16 @@ mix_release = rule(
             providers = [MixProjectInfo, ErlangAppInfo],
             doc = "The Mix application to create a release for",
         ),
-        "extra_srcs": attr.label_list(
-            # This is annoying, but because we need to evaluate mix.exs in
-            # `mix release`, and elixir lets you be *flexible* in these files
-            # we need to support adding arbitrary extra files to this step.
-            doc = "Extra...stuff that needs evaluation at release time.",
-            allow_files = True,
+        "configs": attr.label_list(
+            # Mix configuration files are only evaluated at release time, and
+            # get bundled into the end artifact. Thus, we need to accept these
+            # _here_, and not at compile time.
+            doc = """Configuration files to accept during build.
+
+            Note that all can be provided here, regardless of environment, mix will
+            selectively evaluate the config specific to the specified mix env.
+            """
+            allow_files = [".exs"],
         ),
         "run_argument": attr.string(
             default = "start",
