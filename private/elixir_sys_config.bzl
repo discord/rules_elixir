@@ -50,7 +50,7 @@ def _elixir_sys_config_impl(ctx):
 
     # Determine if we need runtime config
     has_runtime = len(ctx.files.runtime_configs) > 0
-    runtime_config_path = infer_runtime_config_path(ctx) if has_runtime else None
+    runtime_config_path = infer_runtime_config_path(ctx, version) if has_runtime else None
 
     # Parse Config.Provider options
     provider_options = parse_config_provider_options(ctx)
@@ -76,9 +76,6 @@ def _elixir_sys_config_impl(ctx):
         args.add("--runtime-config")
         for runtime_config in ctx.files.runtime_configs:
             args.add("--runtime-file", runtime_config.path)
-
-        # Use the inferred runtime config path
-        args.add("--runtime-path", runtime_config_path)
 
         # Config.Provider options from parsed dict
         if provider_options["reboot_after_config"]:
@@ -108,7 +105,23 @@ def _elixir_sys_config_impl(ctx):
 
     # Create a wrapper script that sets up the PATH for escript
     wrapper = ctx.actions.declare_file("{}_sys_config_wrapper.sh".format(ctx.attr.name))
-    wrapper_content = """#!/bin/bash
+    if has_runtime and runtime_config_path:
+        wrapper_content = """#!/bin/bash
+set -euo pipefail
+
+# Set up Erlang/OTP paths
+export PATH="{erlang_home}/bin:$PATH"
+
+# Read runtime config path from file and pass to tool
+RUNTIME_PATH=$(cat "{runtime_config_path_file}")
+exec "{tool_path}" "$@" --runtime-path "$RUNTIME_PATH"
+""".format(
+            erlang_home = erlang_toolchain.erlang_home,
+            runtime_config_path_file = runtime_config_path.path,
+            tool_path = builder.path,
+        )
+    else:
+        wrapper_content = """#!/bin/bash
 set -euo pipefail
 
 # Set up Erlang/OTP paths
@@ -117,9 +130,9 @@ export PATH="{erlang_home}/bin:$PATH"
 # Run the escript with all arguments
 exec "{tool_path}" "$@"
 """.format(
-        erlang_home = erlang_toolchain.erlang_home,
-        tool_path = builder.path,
-    )
+            erlang_home = erlang_toolchain.erlang_home,
+            tool_path = builder.path,
+        )
 
     ctx.actions.write(
         output = wrapper,
@@ -129,6 +142,8 @@ exec "{tool_path}" "$@"
 
     # Prepare inputs
     inputs = compile_configs + ctx.files.runtime_configs + [builder]
+    if runtime_config_path:
+        inputs.append(runtime_config_path)
 
     # Prepare outputs
     outputs = [sys_config]
