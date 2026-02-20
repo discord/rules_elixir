@@ -56,6 +56,8 @@ def _mix_release_impl(ctx):
     extra_src_files = []
     for src in ctx.attr.configs:
         extra_src_files.extend(src[DefaultInfo].files.to_list())
+    for src in ctx.attr.data:
+        extra_src_files.extend(src[DefaultInfo].files.to_list())
     files = [app_config_file] + extra_src_files
     if erlang_info.beam:
         files.extend(erlang_info.beam)
@@ -211,12 +213,13 @@ mix_release = rule(
             """,
             allow_files = [".exs"],
         ),
-        "unsupported_extra_srcs": attr.label_list(
-            # Sigh...I need to support specific use cases that do arbitrary
-            # Code.require_file in calls in mix.exs.
-            # I don't guarantee that this will continue to be reliable over
-            # time, and will be removing it as soon as I'm able.
-            allow_files = [".ex"],
+        "data": attr.label_list(
+            doc = """
+            Some projects make use of arbitrary artifacts that get read during
+            the evaluation of `mix.exs`. This allows those artifacts to be
+            provided during release time.
+            """,
+            allow_files = True,
         ),
         "run_argument": attr.string(
             default = "start",
