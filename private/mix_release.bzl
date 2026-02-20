@@ -211,6 +211,13 @@ mix_release = rule(
             """,
             allow_files = [".exs"],
         ),
+        "unsupported_extra_srcs": attr.label_list(
+            # Sigh...I need to support specific use cases that do arbitrary
+            # Code.require_file in calls in mix.exs.
+            # I don't guarantee that this will continue to be reliable over
+            # time, and will be removing it as soon as I'm able.
+            allow_files = [".ex"],
+        ),
         "run_argument": attr.string(
             default = "start",
             doc = "The default command to run (start, daemon, etc.)",
