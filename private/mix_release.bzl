@@ -56,6 +56,8 @@ def _mix_release_impl(ctx):
     extra_src_files = []
     for src in ctx.attr.configs:
         extra_src_files.extend(src[DefaultInfo].files.to_list())
+    for src in ctx.attr.data:
+        extra_src_files.extend(src[DefaultInfo].files.to_list())
     files = [app_config_file] + extra_src_files
     if erlang_info.beam:
         files.extend(erlang_info.beam)
@@ -210,6 +212,14 @@ mix_release = rule(
             selectively evaluate the config specific to the specified mix env.
             """,
             allow_files = [".exs"],
+        ),
+        "data": attr.label_list(
+            doc = """
+            Some projects make use of arbitrary artifacts that get read during
+            the evaluation of `mix.exs`. This allows those artifacts to be
+            provided during release time.
+            """,
+            allow_files = True,
         ),
         "run_argument": attr.string(
             default = "start",
