@@ -208,7 +208,7 @@ mix_release = rule(
 
             Note that all can be provided here, regardless of environment, mix will
             selectively evaluate the config specific to the specified mix env.
-            """
+            """,
             allow_files = [".exs"],
         ),
         "run_argument": attr.string(
