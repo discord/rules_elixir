@@ -66,49 +66,71 @@ def infer_version(ctx):
     2. From ReleaseInfo provider if available
     3. Default to "0.1.0"
 
+    Always returns a File containing the version string, so that callers
+    can uniformly read it in their execution-phase actions.
+
     Args:
         ctx: Rule context
 
     Returns:
-        String: Version string (e.g., "1.2.3")
+        File: A file containing the version string (e.g., "1.2.3")
     """
     # 1. Check explicit version attribute
     if hasattr(ctx.attr, "version") and ctx.attr.version:
-        return ctx.attr.version
+        version_file = ctx.actions.declare_file("{}_version.txt".format(ctx.label.name))
+        ctx.actions.write(output = version_file, content = ctx.attr.version)
+        return version_file
 
-    # 2. Check ReleaseInfo provider
+    # 2. Check ReleaseInfo provider (already a File)
     release_info = get_release_info(ctx)
     if release_info:
         return release_info.version
 
     # 3. Default version
-    return "0.1.0"
+    version_file = ctx.actions.declare_file("{}_version.txt".format(ctx.label.name))
+    ctx.actions.write(output = version_file, content = "0.1.0")
+    return version_file
 
-def infer_runtime_config_path(ctx):
+def infer_runtime_config_path(ctx, version = None):
     """Infer the runtime configuration path template.
 
-    This creates an Erlang term template for locating runtime configuration
-    at runtime, following Mix release conventions.
+    This creates a File containing an Erlang term template for locating
+    runtime configuration at runtime, following Mix release conventions.
 
     Args:
         ctx: Rule context
+        version: Optional File from infer_version() to avoid duplicate
+            file declarations. If not provided, infer_version() will be
+            called internally.
 
     Returns:
-        String: Erlang term template for runtime config path
+        File: A file containing the Erlang term template for runtime config path
     """
+    path_file = ctx.actions.declare_file("{}_runtime_config_path.txt".format(ctx.label.name))
+
     # Check if explicit runtime_config_path is provided (for backward compat)
     if hasattr(ctx.attr, "runtime_config_path") and ctx.attr.runtime_config_path:
-        return ctx.attr.runtime_config_path
+        ctx.actions.write(output = path_file, content = ctx.attr.runtime_config_path)
+        return path_file
 
     # Check ReleaseInfo provider
     release_info = get_release_info(ctx)
     if release_info and release_info.runtime_config_path:
-        # Build the full path template using the release root template
-        return '{{:system, "RELEASE_ROOT", "/{}"}}'.format(release_info.runtime_config_path)
+        content = '{{:system, "RELEASE_ROOT", "/{}"}}'.format(release_info.runtime_config_path)
+        ctx.actions.write(output = path_file, content = content)
+        return path_file
 
-    # Default to Mix convention with inferred version
-    version = infer_version(ctx)
-    return '{{:system, "RELEASE_ROOT", "/releases/{}/runtime.exs"}}'.format(version)
+    # Default to Mix convention with inferred version (read at execution time)
+    if not version:
+        version = infer_version(ctx)
+    ctx.actions.run_shell(
+        inputs = [version],
+        outputs = [path_file],
+        command = "printf '{:system, \"RELEASE_ROOT\", \"/releases/%s/runtime.exs\"}' \"$(cat $1)\" > $2",
+        arguments = [version.path, path_file.path],
+        mnemonic = "InferRuntimeConfigPath",
+    )
+    return path_file
 
 def infer_app_name(ctx):
     """Infer the OTP application name from context.

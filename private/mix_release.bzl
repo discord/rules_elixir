@@ -66,6 +66,7 @@ def _mix_release_impl(ctx):
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
     mix_release_artifacts = ctx.actions.declare_directory("{}_release".format(ctx.label.name))
+    version_file = ctx.actions.declare_file("{}_version.txt".format(ctx.label.name))
     script = """set -euo pipefail
 
 {maybe_install_erlang}
@@ -121,6 +122,7 @@ MIX_ENV={env} \\
 
 cd -
 mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
+awk '{{print $2}}' {output_file}/releases/start_erl.data | tr -d '\\n' > {version_file}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         elixir_home = elixir_home,
@@ -131,6 +133,7 @@ mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
         app_name = app_name,
         env = env,
         output_file = mix_release_artifacts.path,
+        version_file = version_file.path,
     )
 
     # TODO: need to make this uh, better and less cargo-culty
@@ -147,7 +150,7 @@ mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
     # script
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = [mix_release_artifacts],
+        outputs = [mix_release_artifacts, version_file],
         command = script,
         mnemonic = "MIXRELEASE",
     )
@@ -170,9 +173,7 @@ mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
     # Create ReleaseInfo provider
     release_info = create_release_info(
         name = release_name,
-        # TODO: confirm if we can elide this from mix.exs instead of specifying
-        # it manually.
-        version = ctx.attr.version,
+        version = version_file,
         env = env,
         app_name = app_name,
         # TODO: i think mix just gives us this for free?
@@ -213,18 +214,6 @@ mix_release = rule(
         "command_line_args": attr.string_list(
             default = [],
             doc = "Additional command line arguments to pass to the release",
-        ),
-
-        # New attributes for v2 integration
-        "version": attr.string(
-            default = "0.1.0",
-            doc = """Release version string.
-
-            This version is used for:
-            - Release directory structure (/releases/{version}/)
-            - Runtime config path construction
-            - Version reporting in the release
-            """,
         ),
         "env": attr.string(
             default = "prod",

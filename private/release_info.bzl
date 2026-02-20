@@ -21,11 +21,11 @@ ReleaseInfo = provider(
         artifacts. Typically matches the application name but can be customized.
         """,
 
-        "version": """Release version string.
+        "version": """Release version File.
 
-        The semantic version of this release (e.g., "1.2.3"). This is used
-        to construct paths like /releases/{version}/sys.config and should
-        match what's in your mix.exs or release configuration.
+        A File containing the version string of this release, extracted
+        from the release's start_erl.data during the build. Used to
+        construct paths like /releases/{version}/sys.config at execution time.
         """,
 
         "env": """Build environment.
@@ -78,21 +78,18 @@ def create_release_info(
 
     Args:
         name: The release name
-        version: Release version string
+        version: File containing the release version string
         env: Build environment (default: "prod")
         app_name: OTP application name (default: same as name)
         release_root_template: Template for finding release root (default: RELEASE_ROOT env var)
         has_runtime_config: Whether runtime config is used (default: False)
-        runtime_config_path: Path to runtime config (default: releases/{version}/runtime.exs)
+        runtime_config_path: Path to runtime config (default: None; callers construct at execution time)
 
     Returns:
         ReleaseInfo provider instance
     """
     if not app_name:
         app_name = name
-
-    if has_runtime_config and not runtime_config_path:
-        runtime_config_path = "releases/{}/runtime.exs".format(version)
 
     return ReleaseInfo(
         name = name,
