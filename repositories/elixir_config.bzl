@@ -222,6 +222,7 @@ platform(
     constraint_values = [
         ":elixir_{identifier}",
     ],
+    parents = ["@local_config_platform//:host"],
 )
 
 """.format(identifier = identifier)
