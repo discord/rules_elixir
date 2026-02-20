@@ -122,7 +122,7 @@ MIX_ENV={env} \\
 
 cd -
 mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
-awk '{{print $2}}' {output_file}/releases/start_erl.data | tr -d '\\n' > {version_file}
+awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n' > {version_file}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         elixir_home = elixir_home,
