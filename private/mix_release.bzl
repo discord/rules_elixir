@@ -184,7 +184,7 @@ awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n
 
     return [
         DefaultInfo(
-            # files = inputs,
+            files = depset([mix_release_artifacts]),
             runfiles = ctx.runfiles(files = [mix_release_artifacts]),
         ),
         release_info,
