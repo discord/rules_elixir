@@ -45,8 +45,18 @@ def _mix_library_impl(ctx):
     # TBD
     # This also needs a better name
     ebin = ctx.actions.declare_directory("ebin")
-    priv_dir = ctx.actions.declare_directory("priv") if ctx.files.priv else None
-    # app_file = ctx.actions.declare_file("{app_name}.app".format(app_name=ctx.attr.app_name))
+
+    # Create individual priv file symlinks rather than a directory artifact.
+    # A directory artifact named "priv" causes path doubling (priv/priv/...)
+    # in any consumer that places priv files under a priv/ directory, because
+    # additional_file_dest_relative_path returns "priv" which doesn't match
+    # the startswith("priv/") check.
+    priv_files = []
+    for priv_file in ctx.files.priv:
+        rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
+        out = ctx.actions.declare_file(path_join("priv", rel_path))
+        ctx.actions.symlink(output = out, target_file = priv_file)
+        priv_files.append(out)
 
     erl_libs_dir = ctx.label.name + "_deps"
 
@@ -88,26 +98,15 @@ def _mix_library_impl(ctx):
 
     all_deps = flat_deps(ctx.attr.deps)
 
-    priv_copy_commands = ""
     priv_copy_to_build_dir = ""
-    if priv_dir:
+    if ctx.files.priv:
         build_dir_cmds = []
-        output_dir_cmds = []
-
         for priv_file in ctx.files.priv:
             rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
             src_path = priv_file.path
-
-            # Commands to copy priv files to build directory (for Mix to access during compilation)
             build_dir_cmds.append('mkdir -p "priv/$(dirname {})"'.format(rel_path))
             build_dir_cmds.append('cp -L "$ORIG_PWD/{}" "priv/{}"'.format(src_path, rel_path))
-
-            # Commands to copy priv files to output directory (for ErlangAppInfo provider)
-            output_dir_cmds.append('mkdir -p "$ABS_OUT_PRIV_DIR/$(dirname {})"'.format(rel_path))
-            output_dir_cmds.append('cp -L "$ORIG_PWD/{}" "$ABS_OUT_PRIV_DIR/{}"'.format(src_path, rel_path))
-
-        priv_copy_to_build_dir = "\n# Copy priv files to build directory for Mix access\n" + "\n".join(build_dir_cmds) + "\n"
-        priv_copy_commands = "\n# Copy priv files to output directory preserving directory structure\nmkdir -p \"$ABS_OUT_PRIV_DIR\"\n" + "\n".join(output_dir_cmds) + "\n"
+        priv_copy_to_build_dir = "\n".join(build_dir_cmds)
 
     # TODO: confirm if we need to use include dir from other modules, or if
     # that's just a way for elixir to expose and interface to erlang.
@@ -139,10 +138,7 @@ cd "{build_dir}"
 
 # Copy priv files into build directory BEFORE compilation
 # This makes them available to Mix tasks, NIFs, etc. during compilation
-if [[ -n "{priv_out_dir}" ]]; then
-    mkdir -p priv
-    {priv_copy_to_build_dir}
-fi
+{priv_copy_to_build_dir}
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
@@ -181,15 +177,6 @@ mkdir -p "$ABS_OUT_DIR"
 # want to keep these in our build output.
 cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
 
-# Set priv output directory if priv files exist
-if [[ -n "{priv_out_dir}" ]]; then
-    if [[ "{priv_out_dir}" == /* ]]; then
-        ABS_OUT_PRIV_DIR="{priv_out_dir}"
-    else
-        ABS_OUT_PRIV_DIR="$ORIG_PWD/{priv_out_dir}"
-    fi
-    {priv_copy_commands}
-fi
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         app_name = ctx.attr.app_name,
@@ -203,9 +190,7 @@ fi
         env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
-        priv_out_dir = priv_dir.path if priv_dir else "",
         priv_copy_to_build_dir = priv_copy_to_build_dir,
-        priv_copy_commands = priv_copy_commands,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
@@ -218,26 +203,16 @@ fi
         ],
     )
 
-    outputs = [ebin]
-    if priv_dir:
-        outputs.append(priv_dir)
-
     ctx.actions.run_shell(
         inputs = inputs,
-        outputs = outputs,
+        outputs = [ebin],
         command = script,
         mnemonic = "MIXCOMPILE",
     )
 
-    output_files = [ebin]
-    priv_files = []
-    if priv_dir:
-        output_files.append(priv_dir)
-        priv_files = [priv_dir]
-
     return [
         DefaultInfo(
-            files = depset(output_files),
+            files = depset([ebin] + priv_files),
         ),
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
