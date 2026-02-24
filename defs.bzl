@@ -88,7 +88,7 @@ def mix_test(name, lib, srcs = None, **kwargs):
     """
     # Validate test files exist if srcs not provided
     if srcs == None or len(srcs) == 0:
-        test_files = native.glob(["test/**/*_test.exs"])
+        test_files = native.glob(["test/**/*_test.exs"], allow_empty=True)
         if len(test_files) == 0:
             fail("mix_test '{}' has no tests to run. ".format(name) +
                  "No files matching test/**/*_test.exs were found and no srcs were provided.")
