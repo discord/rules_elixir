@@ -23,7 +23,12 @@ def _mix_release_impl(ctx):
     # Determine the release name and environment
     release_name = ctx.attr.release_name if ctx.attr.release_name else ctx.label.name
     app_name = ctx.attr.app_name if ctx.attr.app_name else erlang_info.app_name
-    env = ctx.attr.env
+    mix_env = ctx.attr.mix_env
+
+    env = "\n".join([
+        "export {}={}".format(k, ctx.expand_location(v, ctx.attr.data))
+        for k, v in ctx.attr.env.items()
+    ])
 
     all_deps = [ctx.attr.application] + erlang_info.deps
 
@@ -95,12 +100,12 @@ export MIX_OS_CONCURRENCY_LOCK=false
 export HEX_OFFLINE=true
 
 
-mkdir -p "$OUTPUT_DIR/{env}/lib"
+mkdir -p "$OUTPUT_DIR/{mix_env}/lib"
 for app_dir in "$ERL_LIBS_PATH"/*; do
     if [ -d "$app_dir/ebin" ]; then
         app_name=$(basename "$app_dir")
-        mkdir -p "$OUTPUT_DIR/{env}/lib/$app_name/ebin"
-        cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/{env}/lib/$app_name/ebin/"
+        mkdir -p "$OUTPUT_DIR/{mix_env}/lib/$app_name/ebin"
+        cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/{mix_env}/lib/$app_name/ebin/"
     fi
 done
 
@@ -114,7 +119,8 @@ if [[ -n "$ERL_LIBS_PATH" ]]; then
     done
 fi
 
-MIX_ENV={env} \\
+{env}
+MIX_ENV={mix_env} \\
     MIX_BUILD_ROOT="$OUTPUT_DIR" \\
     HOME=/tmp \\
     MIX_HOME=/tmp \\
@@ -123,7 +129,7 @@ MIX_ENV={env} \\
     ${{ABS_ELIXIR_HOME}}/bin/mix release --no-compile --no-deps-check
 
 cd -
-mv $OUTPUT_DIR/{env}/rel/{app_name} {output_file}
+mv $OUTPUT_DIR/{mix_env}/rel/{app_name} {output_file}
 awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n' > {version_file}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
@@ -133,6 +139,7 @@ awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n
         # I think these should be provided via a runfiles struct....right?
         build_dir = app_config_file.dirname,
         app_name = app_name,
+        mix_env = mix_env,
         env = env,
         output_file = mix_release_artifacts.path,
         version_file = version_file.path,
@@ -176,7 +183,7 @@ awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n
     release_info = create_release_info(
         name = release_name,
         version = version_file,
-        env = env,
+        env = mix_env,
         app_name = app_name,
         # TODO: i think mix just gives us this for free?
         has_runtime_config = ctx.attr.sys_config != None if hasattr(ctx.attr, "sys_config") else False,
@@ -229,7 +236,10 @@ mix_release = rule(
             default = [],
             doc = "Additional command line arguments to pass to the release",
         ),
-        "env": attr.string(
+        "env": attr.string_dict(
+            doc = "Custom environment variables to set during the release build.",
+        ),
+        "mix_env": attr.string(
             default = "prod",
             values = ["prod", "dev", "test", "staging"],
             doc = """Build environment for the release.
