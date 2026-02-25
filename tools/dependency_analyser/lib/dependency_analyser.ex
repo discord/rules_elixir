@@ -57,7 +57,12 @@ defmodule DependencyAnalyser do
     # If compilation is needed for specific use cases, it should be done separately
 
     # Load all dependencies - these are already resolved from the root project's perspective
-    deps = Mix.Dep.load_on_environment([])
+    deps =
+      if function_exported?(Mix.Dep, :load_on_environment, 1) do
+        Mix.Dep.load_on_environment([])
+      else
+        Mix.Dep.Converger.converge([])
+      end
 
     # Build package info for the main project
     main_project_dir = File.cwd!()
