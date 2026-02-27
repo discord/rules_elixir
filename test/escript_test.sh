@@ -5,6 +5,7 @@ if [[ -n "$ERLANG_RELEASE_TAR_SHORT_PATH" ]]; then
     mkdir -p $(dirname "$OTP_INSTALL_PATH")
     if mkdir "$OTP_INSTALL_PATH"; then
         tar --extract \
+            --no-same-owner \
             --directory "$OTP_INSTALL_PATH" \
             --file "$ERLANG_RELEASE_TAR_SHORT_PATH"
     fi

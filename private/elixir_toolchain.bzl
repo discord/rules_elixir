@@ -59,6 +59,7 @@ def maybe_install_erlang(ctx, short_path = False):
 mkdir -p $(dirname "{install_path}")
 if mkdir "{install_path}"; then
     tar --extract \\
+        --no-same-owner \\
         --directory "{install_path}" \\
         --file {release_tar}
 fi\
