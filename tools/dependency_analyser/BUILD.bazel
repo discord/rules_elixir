@@ -1,7 +1,7 @@
 # NOTE: this rule specifically *does not* use mix, allowing us to use it to
 # bootstrap rules_elixir
 load("@rules_elixir//:defs.bzl", "elixir_app")
-load("@rules_erlang//:escript.bzl", "escript_archive")
+load("@rules_erlang//:escript.bzl", "escript_archive", "escript_wrapper")
 
 package(default_visibility = [ "//visibility:public"])
 
@@ -21,7 +21,7 @@ elixir_app(
 )
 
 escript_archive(
-    name = "dependency_analyser",
+    name = "dependency_analyser_inner",
     # NOTE: this is hard-coded in upstream rules_elixir.
     # Namespacing is kept sane through directory structure.
     app = ":erlang_app",
@@ -29,4 +29,10 @@ escript_archive(
         "shebang",
         '{emu_args, "-escript main Elixir.DependencyAnalyser -hidden"}',
     ],
+)
+
+escript_wrapper(
+    name = "dependency_analyser",
+    escript = "dependency_analyser_inner",
+    out = "dependency_analyser",
 )
