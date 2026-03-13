@@ -89,7 +89,6 @@ mkdir _output
 OUTPUT_DIR="$(realpath _output)"
 OUTPUT_FILE="$(realpath {output_file})"
 
-set -x
 cd {build_dir}
 
 # export MIX_BUILD_ROOT=$PWD/_output
