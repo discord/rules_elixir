@@ -152,7 +152,7 @@ MIX_ENV=test \\
     HEX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile --no-deps-check --no-elixir-version-check {test_paths} {mix_test_opts}
+    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile {no_start}--no-deps-check {test_paths} {mix_test_opts}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         erlang_home = erlang_home,
@@ -164,6 +164,7 @@ MIX_ENV=test \\
         lib_priv_path = lib_priv_path,
         env = env,
         setup = ctx.attr.setup,
+        no_start = "--no-start " if ctx.attr.no_start else "",
         test_paths = test_paths,
         mix_test_opts = " ".join([shell.quote(opt) for opt in ctx.attr.mix_test_opts]),
     )
@@ -226,6 +227,10 @@ mix_test = rule(
         ),
         "setup": attr.string(
             doc = "Shell commands to run before executing tests",
+        ),
+        "no_start": attr.bool(
+            default = False,
+            doc = "If True, pass --no-start to mix test to prevent applications from being started before tests run",
         ),
         "mix_test_opts": attr.string_list(
             doc = "Additional options to pass to 'mix test'",

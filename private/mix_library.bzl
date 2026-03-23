@@ -162,7 +162,7 @@ MIX_ENV={mix_env} \\
     HEX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --no-elixir-version-check --skip-protocol-consolidation --no-optional-deps
+    ${{ABS_ELIXIR_HOME}}/bin/mix compile --no-deps-check -mode embedded --skip-protocol-consolidation --no-optional-deps
 
 # Use absolute path for output directory from original working directory
 if [[ "{out_dir}" == /* ]]; then
