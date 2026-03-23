@@ -6,7 +6,6 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
 
@@ -41,7 +40,7 @@ def _mix_test_impl(ctx):
     package = ctx.label.package
     erl_libs_path = path_join(package, erl_libs_dir)
 
-    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
+    (erlang_home, release_dir_tar, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx, short_path = True)
 
     env = "\n".join([
@@ -76,11 +75,29 @@ def _mix_test_impl(ctx):
     if lib_priv_dirs:
         lib_priv_path = lib_priv_dirs[0].short_path
 
+    # Build the OTP install snippet for test context. Tests access the tarball
+    # via runfiles ($TEST_SRCDIR/$TEST_WORKSPACE), unlike build actions which
+    # use the execroot path directly.
+    if release_dir_tar:
+        install_erlang = """\
+mkdir -p $(dirname "{install_path}")
+if mkdir "{install_path}"; then
+    tar --extract \\
+        --no-same-owner \\
+        --directory "{install_path}" \\
+        --file "$TEST_SRCDIR/$TEST_WORKSPACE/{release_tar}"
+fi""".format(
+            release_tar = release_dir_tar.short_path,
+            install_path = ctx.toolchains["//:toolchain_type"].otpinfo.install_path,
+        )
+    else:
+        install_erlang = ""
+
     script = """\
 #!/usr/bin/env bash
 set -eo pipefail
 
-{maybe_install_erlang}
+{install_erlang}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
@@ -144,6 +161,12 @@ if [[ -n "$ERL_LIBS_PATH" ]]; then
     done
 fi
 
+# Add OTP stdlib apps to the code path so apps like xmerl are loadable.
+# Build actions find these via ROOTDIR, but test sandboxes need explicit paths.
+for otp_ebin in "{erlang_home}/lib"/*/ebin; do
+    [ -d "$otp_ebin" ] && PA_OPTIONS="$PA_OPTIONS -pa $otp_ebin"
+done
+
 # Run mix test with --no-compile to use pre-compiled artifacts
 # Note: test/*.exs files are still compiled on-the-fly by ExUnit (this is by design)
 MIX_ENV=test \\
@@ -154,7 +177,7 @@ MIX_ENV=test \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile {no_start}--no-deps-check {test_paths} {mix_test_opts}
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        install_erlang = install_erlang,
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         erl_libs_path = erl_libs_path,
