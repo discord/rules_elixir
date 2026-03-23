@@ -152,7 +152,7 @@ MIX_ENV=test \\
     HEX_OFFLINE=true \\
     ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
     ERL_LIBS="$ERL_LIBS_PATH" \\
-    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile --no-start --no-deps-check {test_paths} {mix_test_opts}
+    ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile --no-deps-check --no-elixir-version-check {test_paths} {mix_test_opts}
 """.format(
         maybe_install_erlang = maybe_install_erlang(ctx),
         erlang_home = erlang_home,
@@ -185,6 +185,7 @@ MIX_ENV=test \\
         [
             ctx.runfiles(
                 ctx.files.srcs +
+                ctx.files.data +
                 erl_libs_files +
                 lib_files +
                 [mix_config]
@@ -211,6 +212,10 @@ mix_test = rule(
         "srcs": attr.label_list(
             allow_files = [".exs"],
             doc = "Test files to include in runfiles and optionally run. If specific files are provided, only those tests are run. If empty, all discovered tests are run.",
+        ),
+        "data": attr.label_list(
+            allow_files = True,
+            doc = "Additional data files needed at test runtime (e.g., version files, config data referenced by mix.exs)",
         ),
         "tools": attr.label_list(
             cfg = "target",
