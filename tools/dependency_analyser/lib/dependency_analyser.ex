@@ -1,677 +1,355 @@
 defmodule DependencyAnalyser do
   @moduledoc """
-  Analyzes Mix projects and their dependencies to extract build metadata.
+  Lightweight dependency analyser for Mix projects.
 
-  This tool analyses a Mix project and its dependency tree, outputting
-  information about each package for hermetic builds.
+  Two modes:
+  - `light`: No fetching, only scans in-tree (path) deps. External deps are
+    emitted as stubs (type only, no metadata). Fast, meant to run frequently.
+  - `heavy`: Fetches all deps, scans everything, includes full hex/git metadata.
+    Expensive, run when third-party deps change.
 
-  ## Usage
-
-      mix run -e "DependencyAnalyser.main(System.argv())"
-      # or as an escript:
-      DependencyAnalyser.main(["/path/to/project"])
-      DependencyAnalyser.main(["--dir", "/path/to/project", "--env", "prod"])
-
-  ## Command line options
-
-    * `--dir DIR` or `-d DIR` - Path to the Mix project directory (default: current directory)
-    * `--env ENV` or `-e ENV` - Set Mix environment (default: dev)
-
-  ## Positional arguments
-
-    * If a path is provided as the first argument (without --dir), it will be used as the project directory
+  Output: JSON array of package entries on stdout.
   """
 
-  @doc """
-  Analyzes each package in the dependency tree individually.
-  """
-  def analyse(opts \\ []) do
-    # Ensure we're in a Mix project
-    unless File.exists?("mix.exs") do
-      current_dir = File.cwd!()
-      IO.puts(:stderr, """
-      Error: No mix.exs found in #{current_dir}
-      Please specify a valid Mix project directory:
-        DependencyAnalyser.main(["/path/to/project"])
-      """)
-      System.halt(1)
-    end
+  def main(args \\ System.argv()) do
+    # Escripts pass argv as charlists (Erlang strings), but OptionParser
+    # expects binaries. Convert before parsing.
+    args = Enum.map(args, fn
+      arg when is_list(arg) -> List.to_string(arg)
+      arg when is_binary(arg) -> arg
+    end)
+
+    {opts, _rest, _invalid} =
+      OptionParser.parse(args,
+        switches: [dir: :string, mode: :string, root: :string],
+        aliases: [d: :dir, m: :mode, r: :root]
+      )
+
+    dir = Keyword.get(opts, :dir, ".")
+    mode = Keyword.get(opts, :mode, "light") |> String.to_atom()
+
+    :ok = File.cd!(dir)
 
     Mix.start()
     Mix.shell(Mix.Shell.Process)
-
-    env = Keyword.get(opts, :env, :test)
-    Mix.env(env)
-
-    # Load the project
     Code.compile_file("mix.exs")
-    Mix.Project.get!()
+    _project_module = Mix.Project.get!()
     config = Mix.Project.config()
 
-    fetch_dependencies(env)
+    # root_dir is the monorepo root; all source.path values will be relative to it.
+    # Falls back to project dir if --root is not provided.
+    root_dir = Keyword.get(opts, :root, File.cwd!())
 
-    # Note: We skip compilation here because:
-    # 1. The dependency analyser only needs to analyze the dependency tree structure
-    # 2. Compilation in an escript environment can fail due to missing runtime modules
-    # 3. The fetched dependencies provide enough metadata for analysis
-    # If compilation is needed for specific use cases, it should be done separately
-
-    # Load all dependencies - these are already resolved from the root project's perspective
-    deps =
-      if function_exported?(Mix.Dep, :load_on_environment, 1) do
-        Mix.Dep.load_on_environment([])
-      else
-        Mix.Dep.Converger.converge([])
-      end
-
-    # Build package info for the main project
-    main_project_dir = File.cwd!()
-    main_project_info = build_package_info_for_main_project(
-      config[:app],
-      main_project_dir,
-      config,
-      env
-    )
-
-    # Build info for each dependency using only resolved information
-    dep_infos = Enum.map(deps, fn dep ->
-      build_dependency_package_info(dep, main_project_dir, env)
-    end)
-
-    # Combine all package infos
-    all_packages = [main_project_info | dep_infos]
-
-    # Output as JSON
-    output = Jason.encode!(all_packages, pretty: true)
-    IO.puts(output)
+    case mode do
+      :light -> run_light(config, root_dir)
+      :heavy -> run_heavy(config, root_dir)
+      other -> IO.puts(:stderr, "unknown mode: #{other}"); System.halt(1)
+    end
   end
 
-  defp fetch_dependencies(env) do
-    # Read the lock file
+  # ---------------------------------------------------------------------------
+  # Light mode: no fetching, full metadata for path deps, stubs for externals
+  # ---------------------------------------------------------------------------
+
+  defp run_light(config, root_dir) do
+    deps = converge_deps()
+    project_dir = File.cwd!()
+
+    root_entry = build_root_entry(config, project_dir, root_dir)
+
+    dep_entries =
+      Enum.map(deps, fn dep ->
+        case classify_dep(dep) do
+          :path -> build_path_entry(dep, root_dir)
+          type -> build_stub_entry(dep, type)
+        end
+      end)
+
+    encode_and_output([root_entry | dep_entries])
+  end
+
+  # ---------------------------------------------------------------------------
+  # Heavy mode: fetch everything, full metadata for all deps
+  # ---------------------------------------------------------------------------
+
+  defp run_heavy(config, root_dir) do
+    # Fetch deps first
     lock = Mix.Dep.Lock.read()
+    _apps = Mix.Dep.Fetcher.all(%{}, lock, [])
 
-    # Set up fetch options similar to mix deps.get
-    fetch_opts = [env: env]
+    deps = converge_deps()
+    project_dir = File.cwd!()
 
-    # Fetch all dependencies using Mix.Dep.Fetcher API
-    # This is the same API that mix deps.get uses internally
-    apps = Mix.Dep.Fetcher.all(%{}, lock, fetch_opts)
+    root_entry = build_root_entry(config, project_dir, root_dir)
 
-    if apps == [] do
-      IO.puts(:stderr, "All dependencies are up to date")
-    else
-      IO.puts(:stderr, "Fetched #{length(apps)} dependencies")
-    end
+    dep_entries =
+      Enum.map(deps, fn dep ->
+        case classify_dep(dep) do
+          :path -> build_path_entry(dep, root_dir)
+          :hex -> build_hex_entry(dep)
+          :git -> build_git_entry(dep)
+        end
+      end)
+
+    encode_and_output([root_entry | dep_entries])
   end
 
-  defp encode_term_to_base64(term) do
-    term
-    |> :erlang.term_to_binary()
-    |> Base.encode64()
-  end
+  # ---------------------------------------------------------------------------
+  # Entry builders
+  # ---------------------------------------------------------------------------
 
-  defp capture_mix_project_module_data(mix_config) do
-    # Get the Mix.Project module
-    project_module = Mix.Project.get!()
+  defp build_root_entry(config, project_dir, root_dir) do
+    app_name = Atom.to_string(config[:app])
 
-    # Capture all public functions we care about
-    module_data = %{
-      project: mix_config
-    }
-
-    # Try to capture application/0 if it exists
-    module_data = if function_exported?(project_module, :application, 0) do
-      Map.put(module_data, :application, project_module.application())
-    else
-      module_data
-    end
-
-    # Try to capture cli/0 if it exists
-    module_data = if function_exported?(project_module, :cli, 0) do
-      Map.put(module_data, :cli, project_module.cli())
-    else
-      module_data
-    end
-
-    encode_term_to_base64(module_data)
-  end
-
-  defp build_package_info_for_main_project(app_name, path, mix_config, env) do
-    info = %{
-      app_name: app_name,
-      path: path,
-      type: :path  # The main project is always a path dependency
-    }
-
-    # Extract immediate dependencies from mix config
-    immediate_deps = if deps = mix_config[:deps] do
-      deps
+    immediate_deps =
+      (config[:deps] || [])
       |> Enum.map(fn
-        {dep_name, _version} when is_atom(dep_name) ->
-          Atom.to_string(dep_name)
-        {dep_name, _version, _opts} when is_atom(dep_name) ->
-          Atom.to_string(dep_name)
-        # Handle list format like ["dep_name", "~> 1.0"]
-        [dep_name, _version] when is_atom(dep_name) ->
-          Atom.to_string(dep_name)
-        [dep_name, _version, _opts] when is_atom(dep_name) ->
-          Atom.to_string(dep_name)
+        {name, _} when is_atom(name) -> Atom.to_string(name)
+        {name, _, _} when is_atom(name) -> Atom.to_string(name)
         _ -> nil
       end)
-      |> Enum.filter(&(&1 != nil))
-    else
-      []
-    end
+      |> Enum.reject(&is_nil/1)
 
-    info = if immediate_deps != [] do
-      Map.put(info, :immediate_deps, immediate_deps)
-    else
-      info
-    end
-
-    # Extract app file info - for main project, its path is the main project dir
-    app_file_info = extract_app_file(app_name, path, path, env)
-    info = if app_file_info, do: Map.put(info, :app_file, app_file_info), else: info
-
-    # Find app.src file if it exists
-    app_src_path = find_app_src_file(app_name, path)
-    info = if app_src_path, do: Map.put(info, :app_src_path, app_src_path), else: info
-
-    # Detect file types (main project never has sparse checkout)
-    files_present = detect_file_types(path, nil)
-    info = Map.put(info, :files_present, files_present)
-
-    # Explicitly mark that this is a Mix project (the main project always is)
-    info = Map.put(info, :is_mix_project, true)
-
-    # Add the Mix config for the main project
-    # Keep sanitized version for backward compatibility
-    info = Map.put(info, :mix_config, sanitize_mix_config(mix_config))
-
-    # Add the raw Mix config as base64-encoded term
-    info = Map.put(info, :mix_config_term, encode_term_to_base64(mix_config))
-
-    # Add complete Mix.Project module data (includes application/0, cli/0, etc.)
-    info = Map.put(info, :mix_project_data_term, capture_mix_project_module_data(mix_config))
-
-    info
+    %{
+      app_name: app_name,
+      deps: immediate_deps,
+      source: %{type: "path", path: Path.relative_to(project_dir, root_dir)},
+      files: scan_files(app_name, project_dir)
+    }
   end
 
-  defp build_dependency_package_info(%Mix.Dep{app: app, opts: opts, manager: manager} = dep, main_project_dir, env) do
-    path = Keyword.get(opts, :dest)
+  defp build_path_entry(%Mix.Dep{app: app, opts: opts} = dep, root_dir) do
+    app_name = Atom.to_string(app)
+    dest = Keyword.get(opts, :dest)
 
-    # Check lock to determine if it's a hex package
-    lock = Keyword.get(opts, :lock)
+    %{
+      app_name: app_name,
+      deps: extract_dep_names(dep),
+      source: %{type: "path", path: Path.relative_to(dest, root_dir)},
+      files: scan_files(app_name, dest)
+    }
+  end
 
-    type = cond do
-      # Check if the lock indicates it's a hex package
-      match?({:hex, _, _, _}, lock) or match?({:hex, _, _, _, _, _, _, _}, lock) -> :hex
-      manager == :hex -> :hex
-      Keyword.has_key?(opts, :path) -> :path
-      Keyword.has_key?(opts, :git) -> :git
-      true -> :unknown
-    end
+  defp build_stub_entry(%Mix.Dep{app: app} = dep, type) do
+    %{
+      app_name: Atom.to_string(app),
+      deps: extract_dep_names(dep),
+      source: %{type: Atom.to_string(type)},
+      files: nil
+    }
+  end
 
-    info = %{
-      app_name: app,
-      path: path,
-      type: type
+  defp build_hex_entry(%Mix.Dep{app: app, opts: opts} = dep) do
+    app_name = Atom.to_string(app)
+    dest = Keyword.get(opts, :dest)
+    source = build_hex_source(opts)
+
+    entry = %{
+      app_name: app_name,
+      deps: extract_dep_names(dep),
+      source: source,
+      files: scan_files(app_name, dest)
     }
 
-    # Add relative_path for path dependencies
-    info = if type == :path && Keyword.has_key?(opts, :path) do
-      Map.put(info, :relative_path, Keyword.get(opts, :path))
+    # Surface hex version as top-level app_version
+    if version = source[:version] do
+      Map.put(entry, :app_version, version)
     else
-      info
+      entry
     end
-
-    # Extract immediate dependencies from lock data
-    immediate_deps = if lock do
-      extract_immediate_deps_from_lock(lock)
-    else
-      # For path dependencies without lock info, try to get from Mix.Dep.deps
-      # but convert to string names
-      dep.deps
-      |> Enum.map(fn %Mix.Dep{app: dep_app} -> Atom.to_string(dep_app) end)
-    end
-
-    info = if immediate_deps != [] do
-      Map.put(info, :immediate_deps, immediate_deps)
-    else
-      info
-    end
-
-    # Add hex-specific info if applicable (from resolved lock info)
-    info = if type == :hex do
-      hex_info = extract_hex_info(dep)
-      if hex_info, do: Map.put(info, :hex_info, hex_info), else: info
-    else
-      info
-    end
-
-    # Add git-specific info if applicable
-    info = if type == :git do
-      git_info = extract_git_info(dep)
-      if git_info, do: Map.put(info, :git_info, git_info), else: info
-    else
-      info
-    end
-
-    # Extract app file info - pass main project dir to find deps in _build
-    app_file_info = extract_app_file(app, path, main_project_dir, env)
-    info = if app_file_info, do: Map.put(info, :app_file, app_file_info), else: info
-
-    # Find app.src file if it exists
-    app_src_path = find_app_src_file(app, path)
-    info = if app_src_path, do: Map.put(info, :app_src_path, app_src_path), else: info
-
-    # Extract sparse path if available from git_info
-    sparse_path = if Map.has_key?(info, :git_info) && info[:git_info][:sparse] do
-      info[:git_info][:sparse]
-    else
-      nil
-    end
-
-    # Detect file types
-    files_present = detect_file_types(path, sparse_path)
-    info = Map.put(info, :files_present, files_present)
-
-    # Note if it's a Mix project but DON'T load its mix.exs
-    # We only use the resolved information from the root project
-    info = if File.exists?(Path.join(path, "mix.exs")) do
-      Map.put(info, :is_mix_project, true)
-    else
-      info
-    end
-
-    info
   end
 
-  defp extract_hex_info(%Mix.Dep{opts: opts}) do
+  defp build_git_entry(%Mix.Dep{app: app, opts: opts} = dep) do
+    app_name = Atom.to_string(app)
+    dest = Keyword.get(opts, :dest)
+
+    %{
+      app_name: app_name,
+      deps: extract_dep_names(dep),
+      source: build_git_source(opts),
+      files: scan_files(app_name, dest)
+    }
+  end
+
+  # ---------------------------------------------------------------------------
+  # Source info builders
+  # ---------------------------------------------------------------------------
+
+  defp build_hex_source(opts) do
     case Keyword.get(opts, :lock) do
-      # New hex format with outer checksum
-      {:hex, hex_name, version, _inner_checksum, _managers, _deps, _repo, outer_checksum}
-        when is_binary(outer_checksum) ->
+      {:hex, hex_name, version, _inner, _managers, _deps, _repo, outer_checksum}
+      when is_binary(outer_checksum) ->
         %{
-          hex_name: hex_name,
-          resolved_version: version,
-          outer_checksum: outer_checksum
+          type: "hex",
+          hex_name: Atom.to_string(hex_name),
+          version: version,
+          checksum: outer_checksum
         }
 
-      # Old hex format without outer checksum
-      {:hex, hex_name, version, _checksum} ->
+      {:hex, hex_name, version, checksum} ->
         %{
-          hex_name: hex_name,
-          resolved_version: version,
-          outer_checksum: nil
+          type: "hex",
+          hex_name: Atom.to_string(hex_name),
+          version: version,
+          checksum: checksum
         }
 
       _ ->
-        nil
+        %{type: "hex"}
     end
   end
 
-  defp extract_git_info(%Mix.Dep{opts: opts}) do
+  defp build_git_source(opts) do
     git_url = Keyword.get(opts, :git)
 
-    # Get lock information for resolved commit and sparse field
-    lock_info = case Keyword.get(opts, :lock) do
-      {:git, _url, ref, lock_opts} when is_list(lock_opts) ->
-        info = %{resolved_commit: ref}
-        # Extract sparse field if present
-        if sparse = Keyword.get(lock_opts, :sparse) do
-          Map.put(info, :sparse, sparse)
-        else
-          info
-        end
-      {:git, _url, ref, _opts} ->
-        %{resolved_commit: ref}
-      _ ->
-        nil
-    end
+    {commit, sparse} =
+      case Keyword.get(opts, :lock) do
+        {:git, _url, ref, lock_opts} when is_list(lock_opts) ->
+          {ref, Keyword.get(lock_opts, :sparse)}
 
-    # Only return git info if we have at least the URL
-    if git_url do
-      git_info = %{git_url: git_url}
-
-      # Add resolved commit if available from lock
-      git_info = if lock_info && lock_info[:resolved_commit] do
-        Map.put(git_info, :resolved_commit, lock_info[:resolved_commit])
-      else
-        git_info
-      end
-
-      # Add sparse field if available from lock
-      if lock_info && lock_info[:sparse] do
-        Map.put(git_info, :sparse, lock_info[:sparse])
-      else
-        git_info
-      end
-    else
-      nil
-    end
-  end
-
-  defp extract_immediate_deps_from_lock(lock) do
-    case lock do
-      # New hex format with deps in 6th position
-      {:hex, _name, _version, _inner_checksum, _managers, deps, _repo, _outer_checksum}
-        when is_list(deps) ->
-        # Extract dependency names from the deps list
-        # Each dep is usually a tuple like {:dep_name, "~> 1.0", [hex: :dep_name, repo: "hexpm", optional: false]}
-        Enum.map(deps, fn
-          {dep_name, _version_req, _opts} when is_atom(dep_name) ->
-            Atom.to_string(dep_name)
-          {dep_name, _version_req} when is_atom(dep_name) ->
-            Atom.to_string(dep_name)
-          dep_name when is_atom(dep_name) ->
-            Atom.to_string(dep_name)
-          _ -> nil
-        end)
-        |> Enum.filter(&(&1 != nil))
-
-      # Old hex format without deps
-      {:hex, _name, _version, _checksum} ->
-        []
-
-      # Git dependencies - check if they have deps info
-      {:git, _url, _ref, opts} when is_list(opts) ->
-        # Some git dependencies might have deps in opts
-        if deps = Keyword.get(opts, :deps) do
-          Enum.map(deps, fn
-            {dep_name, _} when is_atom(dep_name) -> Atom.to_string(dep_name)
-            dep_name when is_atom(dep_name) -> Atom.to_string(dep_name)
-            _ -> nil
-          end)
-          |> Enum.filter(&(&1 != nil))
-        else
-          []
-        end
-
-      _ ->
-        []
-    end
-  end
-
-  defp extract_app_file(app_name, path, main_project_dir \\ nil, env \\ :dev) do
-    # Try standard locations for .app file
-    app_file_paths = [
-      Path.join([path, "ebin", "#{app_name}.app"]),
-      Path.join([path, "_build", "**", "lib", "#{app_name}", "ebin", "#{app_name}.app"])
-    ]
-
-    # If we have a main project dir and this is a dependency, also check the main project's _build
-    app_file_paths = if main_project_dir && path != main_project_dir do
-      app_file_paths ++ [
-        Path.join([main_project_dir, "_build", to_string(env), "lib", "#{app_name}", "ebin", "#{app_name}.app"])
-      ]
-    else
-      app_file_paths
-    end
-
-    app_file = Enum.find(app_file_paths, &File.exists?/1) ||
-               List.first(Path.wildcard(Path.join([path, "_build", "**", "lib", "#{app_name}", "ebin", "#{app_name}.app"])))
-
-    if app_file && File.exists?(app_file) do
-      case :file.consult(app_file) do
-        {:ok, [{:application, ^app_name, app_spec}]} ->
-          # Convert to JSON-friendly format
-          %{
-            vsn: to_string(Keyword.get(app_spec, :vsn, "")),
-            description: to_string(Keyword.get(app_spec, :description, "")),
-            modules: Keyword.get(app_spec, :modules, []),
-            registered: Keyword.get(app_spec, :registered, []),
-            applications: Keyword.get(app_spec, :applications, []),
-            optional_applications: Keyword.get(app_spec, :optional_applications, []),
-            included_applications: Keyword.get(app_spec, :included_applications, []),
-            mod: format_mod_for_json(Keyword.get(app_spec, :mod)),
-            env: format_options_for_json(Keyword.get(app_spec, :env, [])),
-            # Add raw app_spec as base64-encoded term
-            app_spec_term: encode_term_to_base64(app_spec)
-          }
+        {:git, _url, ref, _} ->
+          {ref, nil}
 
         _ ->
-          nil
+          {nil, nil}
       end
-    else
-      nil
+
+    base = %{type: "git"}
+    base = if git_url, do: Map.put(base, :git_url, git_url), else: base
+    base = if commit, do: Map.put(base, :commit, commit), else: base
+    if sparse, do: Map.put(base, :sparse, sparse), else: base
+  end
+
+  # ---------------------------------------------------------------------------
+  # Dependency classification and name extraction
+  # ---------------------------------------------------------------------------
+
+  defp classify_dep(%Mix.Dep{opts: opts}) do
+    lock = Keyword.get(opts, :lock)
+
+    cond do
+      Keyword.has_key?(opts, :path) -> :path
+      match?({:hex, _, _, _}, lock) or match?({:hex, _, _, _, _, _, _, _}, lock) -> :hex
+      Keyword.has_key?(opts, :git) -> :git
+      # Default to hex for anything with a hex-shaped lock
+      true -> :hex
     end
   end
 
-  defp find_app_src_file(app_name, path) do
-    # Common locations for .app.src files
-    potential_paths = [
-      Path.join([path, "src", "#{app_name}.app.src"]),
-      Path.join([path, "#{app_name}.app.src"])
-    ]
+  defp extract_dep_names(%Mix.Dep{opts: opts, deps: sub_deps}) do
+    lock = Keyword.get(opts, :lock)
 
-    # Find the first existing path
-    app_src_file = Enum.find(potential_paths, &File.exists?/1)
+    case extract_deps_from_lock(lock) do
+      [] ->
+        # Fallback: use the dep struct's sub-deps
+        Enum.map(sub_deps, fn %Mix.Dep{app: a} -> Atom.to_string(a) end)
 
-    # If found, return the path relative to the package path
-    if app_src_file do
-      Path.relative_to(app_src_file, path)
-    else
-      nil
+      names ->
+        names
     end
   end
 
-  defp detect_file_types(path, _sparse_path \\ nil) do
-    # Common source directories
-    # Note: When sparse checkout is used, the path already points to the sparse directory
-    # So we don't need to modify the scan directories based on sparse_path
-    src_dirs = [
+  defp extract_deps_from_lock(
+         {:hex, _name, _version, _inner, _managers, deps, _repo, _outer}
+       )
+       when is_list(deps) do
+    Enum.map(deps, fn
+      {name, _req, _opts} when is_atom(name) -> Atom.to_string(name)
+      {name, _req} when is_atom(name) -> Atom.to_string(name)
+      name when is_atom(name) -> Atom.to_string(name)
+      _ -> nil
+    end)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp extract_deps_from_lock(_), do: []
+
+  # ---------------------------------------------------------------------------
+  # File scanning
+  # ---------------------------------------------------------------------------
+
+  defp scan_files(app_name, path) when is_binary(path) do
+    scan_dirs = [
       path,
       Path.join(path, "src"),
       Path.join(path, "lib"),
       Path.join(path, "include")
     ]
 
-    # Find xrl and yrl files and make them relative to the package path
-    xrl_files = find_files_in_dirs(src_dirs, "*.xrl", path)
-    yrl_files = find_files_in_dirs(src_dirs, "*.yrl", path)
+    has_ex = has_files?(scan_dirs, "*.ex", path)
+    has_erl = has_files?(scan_dirs, "*.erl", path)
+    has_hrl = has_files?(scan_dirs, "*.hrl", path)
 
-    # Combine xrl and yrl files into a single list
-    xrl_yrl_files = xrl_files ++ yrl_files
+    xrl_yrl_paths = find_files(scan_dirs, "*.xrl", path) ++ find_files(scan_dirs, "*.yrl", path)
 
-    # Check for each file type
+    app_src_path = find_app_src(app_name, path)
+
     %{
-      erl: exists_in_dirs?(src_dirs, "*.erl"),
-      hrl: exists_in_dirs?(src_dirs, "*.hrl"),
-      ex: exists_in_dirs?(src_dirs, "*.ex"),
-      xrl_yrl_files: xrl_yrl_files
+      has_ex: has_ex,
+      has_erl: has_erl,
+      has_hrl: has_hrl,
+      has_xrl_yrl: xrl_yrl_paths != [],
+      xrl_yrl_paths: xrl_yrl_paths,
+      has_app_src: app_src_path != nil,
+      app_src_path: app_src_path,
+      has_mix_exs: File.exists?(Path.join(path, "mix.exs"))
     }
   end
 
-  defp exists_in_dirs?(dirs, pattern) do
+  defp scan_files(_app_name, nil), do: nil
+
+  defp has_files?(dirs, pattern, base_path) do
     Enum.any?(dirs, fn dir ->
-      base_path = get_base_path_for_dir(dir)
       Path.wildcard(Path.join([dir, "**", pattern]))
-      |> Enum.reject(fn file_path ->
-        is_in_excluded_dir_relative?(file_path, base_path)
-      end)
+      |> Enum.reject(&in_excluded_dir?(&1, base_path))
       |> Enum.any?()
     end)
   end
 
-  defp find_files_in_dirs(dirs, pattern, base_path) do
+  defp find_files(dirs, pattern, base_path) do
     dirs
     |> Enum.flat_map(fn dir ->
       Path.wildcard(Path.join([dir, "**", pattern]))
     end)
-    |> Enum.reject(fn file_path ->
-      is_in_excluded_dir_relative?(file_path, base_path)
-    end)
-    |> Enum.map(fn file_path ->
-      # Make the path relative to the base package path
-      Path.relative_to(file_path, base_path)
-    end)
+    |> Enum.reject(&in_excluded_dir?(&1, base_path))
+    |> Enum.map(&Path.relative_to(&1, base_path))
     |> Enum.uniq()
   end
 
-  defp get_base_path_for_dir(dir) do
-    # Get the base package path from a directory
-    # Remove trailing src/lib/include to get the package root
-    cond do
-      String.ends_with?(dir, "/src") -> String.trim_trailing(dir, "/src")
-      String.ends_with?(dir, "/lib") -> String.trim_trailing(dir, "/lib")
-      String.ends_with?(dir, "/include") -> String.trim_trailing(dir, "/include")
-      true -> dir
+  defp in_excluded_dir?(file_path, base_path) do
+    file_path
+    |> Path.relative_to(base_path)
+    |> Path.split()
+    |> Enum.any?(fn seg -> seg == "deps" || seg == "_build" end)
+  end
+
+  defp find_app_src(app_name, path) do
+    app_name_str = to_string(app_name)
+
+    candidates = [
+      Path.join([path, "src", "#{app_name_str}.app.src"]),
+      Path.join([path, "#{app_name_str}.app.src"])
+    ]
+
+    case Enum.find(candidates, &File.exists?/1) do
+      nil -> nil
+      found -> Path.relative_to(found, path)
     end
   end
 
-  defp is_in_excluded_dir_relative?(file_path, base_path) do
-    # Make the path relative to the base package path
-    relative_path = Path.relative_to(file_path, base_path)
-    # Split the relative path into segments
-    segments = Path.split(relative_path)
-    # Check if any segment is "deps" or "_build" in the relative path
-    # This excludes only nested deps/_build dirs within the package
-    Enum.any?(segments, fn segment ->
-      segment == "deps" || segment == "_build"
-    end)
-  end
+  # ---------------------------------------------------------------------------
+  # Helpers
+  # ---------------------------------------------------------------------------
 
-  defp sanitize_mix_config(config) when is_list(config) do
-    # Convert keyword list to map and sanitize values
-    config
-    |> Enum.map(fn {k, v} -> {k, sanitize_config_value(v)} end)
-    |> Enum.into(%{})
-  end
-  defp sanitize_mix_config(config), do: config
-
-  defp sanitize_config_value(value) when is_function(value) do
-    # Convert functions to a string representation
-    inspect(value)
-  end
-  defp sanitize_config_value(%Regex{} = regex) do
-    # Convert regex to a string representation
-    %{
-      type: "regex",
-      source: regex.source,
-      opts: regex.opts
-    }
-  end
-  defp sanitize_config_value(value) when is_struct(value) do
-    # For other structs, convert to map and sanitize
-    value
-    |> Map.from_struct()
-    |> Map.put(:__struct__, inspect(value.__struct__))
-    |> sanitize_config_value()
-  end
-  defp sanitize_config_value(value) when is_list(value) do
-    # Recursively sanitize lists
-    if Keyword.keyword?(value) do
-      sanitize_mix_config(value)
+  defp converge_deps do
+    if function_exported?(Mix.Dep, :load_on_environment, 1) do
+      Mix.Dep.load_on_environment([])
     else
-      Enum.map(value, &sanitize_config_value/1)
+      Mix.Dep.Converger.converge([])
     end
   end
-  defp sanitize_config_value(value) when is_map(value) do
-    # Recursively sanitize maps
-    Map.new(value, fn {k, v} -> {k, sanitize_config_value(v)} end)
-  end
-  defp sanitize_config_value(value) when is_tuple(value) do
-    # Convert tuples to lists for JSON compatibility
-    value
-    |> Tuple.to_list()
-    |> Enum.map(&sanitize_config_value/1)
-  end
-  defp sanitize_config_value(value), do: value
 
-  defp format_mod_for_json(nil), do: nil
-  defp format_mod_for_json({module, args}) do
-    %{
-      module: module,
-      args: args
-    }
-  end
-
-  defp format_options_for_json(opts) when is_list(opts) do
-    # Convert keyword list to a map, handling nested structures
-    Enum.map(opts, fn
-      {k, v} when is_list(v) ->
-        # Check if it's a keyword list
-        if Keyword.keyword?(v) do
-          {k, format_options_for_json(v)}
-        else
-          {k, v}
-        end
-      {k, v} -> {k, v}
-      other -> other
-    end)
-    |> Enum.into(%{})
-  end
-  defp format_options_for_json(opts), do: opts
-
-  @doc """
-  Main entry point for the dependency analyser.
-
-  Accepts command line arguments and runs the analysis.
-
-  ## Examples
-
-      DependencyAnalyser.main([])
-      DependencyAnalyser.main(["/path/to/project"])
-      DependencyAnalyser.main(["--dir", "/path/to/project", "--env", "prod"])
-      DependencyAnalyser.main(["/path/to/project", "-e", "test"])
-  """
-  def main(args \\ System.argv()) do
-    # Convert charlists to strings if needed (escript issue)
-    args = Enum.map(args, fn
-      arg when is_list(arg) -> List.to_string(arg)
-      arg when is_binary(arg) -> arg
-    end)
-
-    # Parse command line arguments
-    {opts, positional_args, _invalid} = OptionParser.parse(args,
-      switches: [env: :string, dir: :string],
-      aliases: [e: :env, d: :dir],
-      strict: false
-    )
-
-    # Determine the project directory
-    # Priority: --dir flag > first positional arg > current directory
-    project_dir = cond do
-      dir = opts[:dir] ->
-        dir
-      length(positional_args) > 0 ->
-        first_arg = hd(positional_args)
-        # Convert to string if it's not already
-        first_arg_str = if is_binary(first_arg), do: first_arg, else: to_string(first_arg)
-        # Check if it starts with a dash (indicating it's a flag that wasn't parsed)
-        if String.starts_with?(first_arg_str, "-") do
-          "."
-        else
-          first_arg_str
-        end
-      true ->
-        "."
-    end
-
-    # Convert env string to atom if provided
-    opts = if env = opts[:env] do
-      Keyword.put(opts, :env, String.to_atom(env))
-    else
-      opts
-    end
-
-    # Change to the project directory
-    original_dir = File.cwd!()
-
-    case File.cd(project_dir) do
-      :ok ->
-        # Run the analyser and then restore original directory
-        result = try do
-          analyse(opts)
-        after
-          File.cd!(original_dir)
-        end
-        result
-
-      {:error, reason} ->
-        IO.puts(:stderr, "Error: Cannot change to directory '#{project_dir}': #{inspect(reason)}")
-        System.halt(1)
-    end
+  defp encode_and_output(packages) do
+    IO.puts(Jason.encode!(packages, pretty: true))
   end
 end
