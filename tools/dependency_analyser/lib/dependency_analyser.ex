@@ -28,7 +28,7 @@ defmodule DependencyAnalyser do
     dir = Keyword.get(opts, :dir, ".")
     mode = Keyword.get(opts, :mode, "light") |> String.to_atom()
 
-    :ok = File.cd!(dir)
+    File.cd!(dir)
 
     Mix.start()
     Mix.shell(Mix.Shell.Process)
@@ -88,6 +88,10 @@ defmodule DependencyAnalyser do
           :path -> build_path_entry(dep, root_dir)
           :hex -> build_hex_entry(dep)
           :git -> build_git_entry(dep)
+          :unknown ->
+            %Mix.Dep{app: app} = dep
+            IO.warn("unknown dep type for #{app}, treating as hex")
+            build_hex_entry(dep)
         end
       end)
 
@@ -232,7 +236,7 @@ defmodule DependencyAnalyser do
       match?({:hex, _, _, _}, lock) or match?({:hex, _, _, _, _, _, _, _}, lock) -> :hex
       Keyword.has_key?(opts, :git) -> :git
       # Default to hex for anything with a hex-shaped lock
-      true -> :hex
+      true -> :unknown
     end
   end
 
