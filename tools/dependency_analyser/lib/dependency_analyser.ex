@@ -32,6 +32,7 @@ defmodule DependencyAnalyser do
 
     Mix.start()
     Mix.shell(Mix.Shell.Process)
+    Mix.env(:test)
     Code.compile_file("mix.exs")
     _project_module = Mix.Project.get!()
     config = Mix.Project.config()
