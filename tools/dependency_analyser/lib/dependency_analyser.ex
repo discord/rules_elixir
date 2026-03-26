@@ -273,25 +273,26 @@ defmodule DependencyAnalyser do
   # ---------------------------------------------------------------------------
 
   defp scan_files(app_name, path) when is_binary(path) do
-    scan_dirs = [
-      path,
-      Path.join(path, "src"),
-      Path.join(path, "lib"),
-      Path.join(path, "include")
-    ]
+    scan_dirs = [path, Path.join(path, "src"), Path.join(path, "lib"), Path.join(path, "include")]
 
-    has_ex = has_files?(scan_dirs, "*.ex", path)
-    has_erl = has_files?(scan_dirs, "*.erl", path)
-    has_hrl = has_files?(scan_dirs, "*.hrl", path)
+    by_ext =
+      scan_dirs
+      |> Enum.flat_map(fn dir -> Path.wildcard(Path.join([dir, "**", "*"])) end)
+      |> Enum.reject(&File.dir?/1)
+      |> Enum.reject(&in_excluded_dir?(&1, path))
+      |> Enum.uniq()
+      |> Enum.group_by(&Path.extname/1)
 
-    xrl_yrl_paths = find_files(scan_dirs, "*.xrl", path) ++ find_files(scan_dirs, "*.yrl", path)
+    xrl_yrl_paths =
+      (Map.get(by_ext, ".xrl", []) ++ Map.get(by_ext, ".yrl", []))
+      |> Enum.map(&Path.relative_to(&1, path))
 
     app_src_path = find_app_src(app_name, path)
 
     %{
-      has_ex: has_ex,
-      has_erl: has_erl,
-      has_hrl: has_hrl,
+      has_ex: Map.has_key?(by_ext, ".ex"),
+      has_erl: Map.has_key?(by_ext, ".erl"),
+      has_hrl: Map.has_key?(by_ext, ".hrl"),
       has_xrl_yrl: xrl_yrl_paths != [],
       xrl_yrl_paths: xrl_yrl_paths,
       has_app_src: app_src_path != nil,
@@ -301,24 +302,6 @@ defmodule DependencyAnalyser do
   end
 
   defp scan_files(_app_name, nil), do: nil
-
-  defp has_files?(dirs, pattern, base_path) do
-    Enum.any?(dirs, fn dir ->
-      Path.wildcard(Path.join([dir, "**", pattern]))
-      |> Enum.reject(&in_excluded_dir?(&1, base_path))
-      |> Enum.any?()
-    end)
-  end
-
-  defp find_files(dirs, pattern, base_path) do
-    dirs
-    |> Enum.flat_map(fn dir ->
-      Path.wildcard(Path.join([dir, "**", pattern]))
-    end)
-    |> Enum.reject(&in_excluded_dir?(&1, base_path))
-    |> Enum.map(&Path.relative_to(&1, base_path))
-    |> Enum.uniq()
-  end
 
   defp in_excluded_dir?(file_path, base_path) do
     file_path
