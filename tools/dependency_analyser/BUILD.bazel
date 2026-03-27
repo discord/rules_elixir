@@ -9,7 +9,7 @@ elixir_app(
     srcs = [
         "lib/dependency_analyser.ex",
     ],
-    app_name = "convert_lockfile",
+    app_name = "dependency_analyser",
     deps = [
         "@rules_elixir//elixir:elixir",
         "@rules_elixir//elixir:hex",
@@ -36,3 +36,4 @@ escript_wrapper(
     escript = "dependency_analyser_inner",
     out = "dependency_analyser",
 )
+
