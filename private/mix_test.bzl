@@ -1,20 +1,18 @@
 load("@bazel_skylib//lib:shell.bzl", "shell")
-load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
-load("@rules_erlang//:util.bzl", "path_join")
+load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("@rules_erlang//private:util.bzl", "erl_libs_contents")
 load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
+    "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
 
 def _mix_test_impl(ctx):
-    # Get providers from the lib dependency
     lib_erlang_info = ctx.attr.lib[ErlangAppInfo]
     lib_mix_info = ctx.attr.lib[MixProjectInfo]
 
-    # Validate that lib was compiled with mix_env="test"
     if lib_mix_info.mix_env != "test":
         fail("mix_test requires a mix_library compiled with mix_env='test'. " +
              "Target '{}' was compiled with mix_env='{}'. ".format(ctx.attr.lib.label, lib_mix_info.mix_env) +
@@ -22,25 +20,19 @@ def _mix_test_impl(ctx):
 
     app_name = lib_erlang_info.app_name
     mix_config = lib_mix_info.mix_config
+    lib_beam_dirs = lib_erlang_info.beam
+    lib_priv_dirs = lib_erlang_info.priv
 
-    # Get the ebin directory from the library
-    lib_beam_dirs = lib_erlang_info.beam  # List containing the ebin directory
-    lib_priv_dirs = lib_erlang_info.priv  # List containing the priv directory (if any)
-
-    # Build ERL_LIBS for all dependencies (excluding the lib itself)
     erl_libs_dir = ctx.label.name + "_deps"
-    lib_deps = lib_erlang_info.deps
-
     erl_libs_files = erl_libs_contents(
         ctx,
         dir = erl_libs_dir,
-        deps = lib_deps,
+        deps = lib_erlang_info.deps,
     )
 
     package = ctx.label.package
-    erl_libs_path = path_join(package, erl_libs_dir)
 
-    (erlang_home, release_dir_tar, erlang_runfiles) = erlang_dirs(ctx)
+    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx, short_path = True)
 
     env = "\n".join([
@@ -50,8 +42,7 @@ def _mix_test_impl(ctx):
 
     output = ctx.actions.declare_file(ctx.label.name)
 
-    # Build test path arguments if specific test files are provided
-    # Strip package prefix since we cd into the package directory
+    # Strip package prefix from test paths since we cd into the package directory
     test_paths = ""
     if ctx.files.srcs:
         paths = []
@@ -64,34 +55,11 @@ def _mix_test_impl(ctx):
                 paths.append(s.short_path)
         test_paths = " ".join(paths)
 
-    # Get the path to the lib's ebin directory
-    # lib_beam_dirs is a list of File objects (directories)
-    lib_ebin_path = ""
-    if lib_beam_dirs:
-        lib_ebin_path = lib_beam_dirs[0].short_path
-
-    # Get the path to the lib's priv directory (if any)
-    lib_priv_path = ""
-    if lib_priv_dirs:
-        lib_priv_path = lib_priv_dirs[0].short_path
-
-    # Build the OTP install snippet for test context. Tests access the tarball
-    # via runfiles ($TEST_SRCDIR/$TEST_WORKSPACE), unlike build actions which
-    # use the execroot path directly.
-    if release_dir_tar:
-        install_erlang = """\
-mkdir -p $(dirname "{install_path}")
-if mkdir "{install_path}"; then
-    tar --extract \\
-        --no-same-owner \\
-        --directory "{install_path}" \\
-        --file "$TEST_SRCDIR/$TEST_WORKSPACE/{release_tar}"
-fi""".format(
-            release_tar = release_dir_tar.short_path,
-            install_path = ctx.toolchains["//:toolchain_type"].otpinfo.install_path,
-        )
-    else:
-        install_erlang = ""
+    # Priv symlink: only emit if the main app has priv files.
+    # After cd into package dir, "priv" is relative to cwd.
+    priv_symlink = 'ln -s "$(realpath priv)" _build/test/lib/{app_name}/priv'.format(
+        app_name = app_name,
+    ) if lib_priv_dirs else ""
 
     script = """\
 #!/usr/bin/env bash
@@ -104,87 +72,52 @@ else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
 export PATH="$ABS_ELIXIR_HOME"/bin:"{erlang_home}"/bin:${{PATH}}
-
-# Navigate to the mix project root
-cd "$TEST_SRCDIR/$TEST_WORKSPACE/{package}"
-
-# Set up ERL_LIBS for dependencies
-ERL_LIBS_PATH=""
-if [[ -n "{erl_libs_path}" && -d "$TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path}" ]]; then
-    ERL_LIBS_PATH="$(realpath $TEST_SRCDIR/$TEST_WORKSPACE/{erl_libs_path})"
-fi
-export ERL_LIBS="$ERL_LIBS_PATH"
-
-export HOME=/tmp
-export MIX_HOME=/tmp/.mix
+export HOME="$TEST_TMPDIR"
 export MIX_ENV=test
+
+# Bazel test runner sets TEST_SRCDIR and TEST_WORKSPACE.
+# After cd, all runfiles paths are relative to the mix project root.
+cd "$TEST_SRCDIR/$TEST_WORKSPACE/{package}"
+DEPS_DIR="$(realpath {erl_libs_dir})"
 
 {env}
 
 {setup}
 
-# Set up _build directory structure with pre-compiled artifacts
-# This makes Mix think the project is already compiled
-mkdir -p _build/test/lib/{app_name}/ebin
+# Set up _build/test/lib with symlinks to Bazel-compiled outputs.
+# With --no-compile, Mix is read-only — symlinks avoid copying entirely.
+# Mix manages app code paths from _build; no -pa flags needed for deps.
+mkdir -p _build/test/lib/{app_name}
+ln -s "$(realpath ebin)" _build/test/lib/{app_name}/ebin
+{priv_symlink}
 
-# Copy pre-compiled .beam and .app files from the mix_library
-LIB_EBIN_PATH="$TEST_SRCDIR/$TEST_WORKSPACE/{lib_ebin_path}"
-if [[ -d "$LIB_EBIN_PATH" ]]; then
-    cp -r "$LIB_EBIN_PATH"/* _build/test/lib/{app_name}/ebin/
-fi
-
-# Copy priv directory if it exists
-if [[ -n "{lib_priv_path}" ]]; then
-    LIB_PRIV_PATH="$TEST_SRCDIR/$TEST_WORKSPACE/{lib_priv_path}"
-    if [[ -d "$LIB_PRIV_PATH" ]]; then
-        mkdir -p _build/test/lib/{app_name}/priv
-        cp -r "$LIB_PRIV_PATH"/* _build/test/lib/{app_name}/priv/
-    fi
-fi
-
-# Set up dependency directories and build PA_OPTIONS in a single pass
-PA_OPTIONS="-pa _build/test/lib/{app_name}/ebin"
-if [[ -n "$ERL_LIBS_PATH" ]]; then
-    for app_dir in "$ERL_LIBS_PATH"/*; do
-        app_basename=$(basename "$app_dir")
-        # Copy ebin directory and add to PA_OPTIONS
-        if [[ -d "$app_dir/ebin" ]]; then
-            mkdir -p "_build/test/lib/$app_basename/ebin"
-            cp -r "$app_dir/ebin"/* "_build/test/lib/$app_basename/ebin/"
-            PA_OPTIONS="$PA_OPTIONS -pa $app_dir/ebin"
-        fi
-        # Copy priv directory if present
-        if [[ -d "$app_dir/priv" ]]; then
-            mkdir -p "_build/test/lib/$app_basename/priv"
-            cp -r "$app_dir/priv"/* "_build/test/lib/$app_basename/priv/"
-        fi
-    done
-fi
-
-# Add OTP stdlib apps to the code path so apps like xmerl are loadable.
-# Build actions find these via ROOTDIR, but test sandboxes need explicit paths.
-for otp_ebin in "{erlang_home}/lib"/*/ebin; do
-    [ -d "$otp_ebin" ] && PA_OPTIONS="$PA_OPTIONS -pa $otp_ebin"
+for app_dir in "$DEPS_DIR"/*; do
+    ln -s "$app_dir" "_build/test/lib/$(basename "$app_dir")"
 done
 
-# Run mix test with --no-compile to use pre-compiled artifacts
-# Note: test/*.exs files are still compiled on-the-fly by ExUnit (this is by design)
+# OTP -pa: Erlang is extracted to a non-standard sandbox path.
+OTP_PA=""
+for otp_ebin in "{erlang_home}/lib"/*/ebin; do
+    [ -d "$otp_ebin" ] && OTP_PA="$OTP_PA -pa $otp_ebin"
+done
+
+# ERL_LIBS: needed so Mix can find Hex (SCM provider for parsing mix.exs).
+# In native Mix, Hex comes from ~/.mix/archives; in Bazel, MIX_HOME is empty.
 MIX_ENV=test \\
     MIX_BUILD_ROOT=_build \\
-    MIX_HOME=/tmp \\
+    MIX_HOME="$TEST_TMPDIR/.mix" \\
     HEX_OFFLINE=true \\
-    ELIXIR_ERL_OPTIONS="$PA_OPTIONS" \\
-    ERL_LIBS="$ERL_LIBS_PATH" \\
+    ELIXIR_ERL_OPTIONS="$OTP_PA" \\
+    ERL_LIBS="$DEPS_DIR" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile {no_start}--no-deps-check {test_paths} {mix_test_opts}
 """.format(
-        install_erlang = install_erlang,
+        install_erlang = maybe_install_erlang(ctx, short_path = True),
         erlang_home = erlang_home,
         elixir_home = elixir_home,
-        erl_libs_path = erl_libs_path,
         package = package,
         app_name = app_name,
-        lib_ebin_path = lib_ebin_path,
-        lib_priv_path = lib_priv_path,
+        erl_libs_dir = erl_libs_dir,
+        priv_symlink = priv_symlink,
         env = env,
         setup = ctx.attr.setup,
         no_start = "--no-start " if ctx.attr.no_start else "",
@@ -197,16 +130,12 @@ MIX_ENV=test \\
         content = script,
     )
 
-    # Collect all files needed at runtime
-    lib_files = []
-    for beam_dir in lib_beam_dirs:
-        lib_files.append(beam_dir)
-    for priv_dir in lib_priv_dirs:
-        lib_files.append(priv_dir)
+    lib_files = list(lib_beam_dirs) + list(lib_priv_dirs)
 
     runfiles = erlang_runfiles.merge(elixir_runfiles)
     runfiles = runfiles.merge_all(
         [
+            ctx.attr.lib[DefaultInfo].default_runfiles,
             ctx.runfiles(
                 ctx.files.srcs +
                 ctx.files.data +
