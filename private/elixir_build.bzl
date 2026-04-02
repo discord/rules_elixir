@@ -7,9 +7,8 @@ load(
     "http_archive",
 )
 load(
-    "@rules_erlang//tools:erlang_toolchain.bzl",
-    "erlang_dirs",
-    "maybe_install_erlang",
+    "@rules_erlang//private:erlang_build.bzl",
+    "OtpInfo",
 )
 
 ElixirInfo = provider(
@@ -21,11 +20,34 @@ ElixirInfo = provider(
     ],
 )
 
+def otp_install_snippet(otp_info):
+    """Generate shell snippet to extract OTP release tar, like maybe_install_erlang."""
+    if otp_info.release_dir_tar == None:
+        return ""
+    return """\
+mkdir -p $(dirname "{install_path}")
+if mkdir "{install_path}"; then
+    tar --extract --no-same-owner \\
+        --directory "{install_path}" \\
+        --file {release_tar}
+fi""".format(
+        release_tar = otp_info.release_dir_tar.path,
+        install_path = otp_info.install_path,
+    )
+
+def otp_runfiles(ctx, otp_info):
+    """Build runfiles depset for OTP, like erlang_dirs."""
+    if otp_info.release_dir_tar != None:
+        return ctx.runfiles([otp_info.release_dir_tar, otp_info.version_file])
+    else:
+        return ctx.runfiles([otp_info.version_file])
+
 def _elixir_build_impl(ctx):
+    otp_info = ctx.attr.otp[OtpInfo]
     release_dir = ctx.actions.declare_directory("elixir_release")
     version_file = ctx.actions.declare_file("elixir_version")
 
-    (erlang_home, _, runfiles) = erlang_dirs(ctx)
+    runfiles = otp_runfiles(ctx, otp_info)
 
     ctx.actions.run_shell(
         inputs = depset(
@@ -63,8 +85,8 @@ make
 cp -r bin $ABS_RELEASE_DIR/
 cp -r lib $ABS_RELEASE_DIR/
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx),
-            erlang_home = erlang_home,
+            maybe_install_erlang = otp_install_snippet(otp_info),
+            erlang_home = otp_info.erlang_home,
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
             first_source_file = ctx.files.srcs[0].path if ctx.files.srcs else "",
@@ -88,8 +110,8 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx),
-            erlang_home = erlang_home,
+            maybe_install_erlang = otp_install_snippet(otp_info),
+            erlang_home = otp_info.erlang_home,
             elixir_home = release_dir.path,
             version_file = version_file.path,
         ),
@@ -99,7 +121,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 
     return [
         DefaultInfo(files = depset([release_dir, version_file])),
-        ctx.toolchains["@rules_erlang//tools:toolchain_type"].otpinfo,
+        otp_info,
         ElixirInfo(
             release_dir = release_dir,
             elixir_home = None,
@@ -111,18 +133,24 @@ elixir_build = rule(
     implementation = _elixir_build_impl,
     attrs = {
         "srcs": attr.label_list(allow_files = True),
+        "otp": attr.label(
+            mandatory = True,
+            providers = [OtpInfo],
+            doc = "An erlang_build target to use for compiling Elixir.",
+        ),
     },
-    toolchains = ["@rules_erlang//tools:toolchain_type"],
 )
 
 def _elixir_external_impl(ctx):
+    otp_info = ctx.attr.otp[OtpInfo]
+
     elixir_home = ctx.attr.elixir_home
     if elixir_home == "":
         elixir_home = ctx.attr._elixir_home[BuildSettingInfo].value
 
     version_file = ctx.actions.declare_file(ctx.label.name + "_version")
 
-    (erlang_home, _, runfiles) = erlang_dirs(ctx)
+    runfiles = otp_runfiles(ctx, otp_info)
 
     ctx.actions.run_shell(
         inputs = runfiles.files,
@@ -135,8 +163,8 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx),
-            erlang_home = erlang_home,
+            maybe_install_erlang = otp_install_snippet(otp_info),
+            erlang_home = otp_info.erlang_home,
             elixir_home = elixir_home,
             version_file = version_file.path,
         ),
@@ -148,7 +176,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
         DefaultInfo(
             files = depset([version_file]),
         ),
-        ctx.toolchains["@rules_erlang//tools:toolchain_type"].otpinfo,
+        otp_info,
         ElixirInfo(
             release_dir = None,
             elixir_home = elixir_home,
@@ -161,6 +189,10 @@ elixir_external = rule(
     attrs = {
         "_elixir_home": attr.label(default = Label("//:elixir_home")),
         "elixir_home": attr.string(),
+        "otp": attr.label(
+            mandatory = True,
+            providers = [OtpInfo],
+            doc = "An erlang_build target providing the OTP installation.",
+        ),
     },
-    toolchains = ["@rules_erlang//tools:toolchain_type"],
 )

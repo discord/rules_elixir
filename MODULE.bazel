@@ -18,6 +18,17 @@ archive_override(
     url = "https://github.com/discord/rules_erlang/archive/b4b01911b99944fa0c9efb66bf3d9030ee784fa9.tar.gz",
 )
 
+# erlang_config is needed so @erlang_config is visible in repos created
+# by the elixir_config extension (for wiring the OTP build dependency).
+erlang_config = use_extension(
+    "@rules_erlang//bzlmod:extensions.bzl",
+    "erlang_config",
+)
+use_repo(
+    erlang_config,
+    "erlang_config",
+)
+
 elixir_config = use_extension(
     "@rules_elixir//bzlmod:extensions.bzl",
     "elixir_config",

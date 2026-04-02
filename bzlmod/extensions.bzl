@@ -17,6 +17,12 @@ DEFAULT_ELIXIR_VERSION = "1.15.0"
 DEFAULT_ELIXIR_SHA256 = "0f4df7574a5f300b5c66f54906222cd46dac0df7233ded165bc8e80fd9ffeb7a"
 
 def _elixir_config(ctx):
+    # Resolve the canonical repo name for @erlang_config so we can reference
+    # it from generated http_archive repos (which don't have it in their
+    # repo mapping). We use Label().repo_name per Bazel docs rather than
+    # hardcoding the canonical name format.
+    erlang_config_repo = Label("@erlang_config").repo_name
+
     types = {}
     versions = {}
     urls = {}
@@ -44,7 +50,9 @@ def _elixir_config(ctx):
             target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
             exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
 
-            # Create repository for downloading and building Elixir source
+            # Create repository for downloading and building Elixir source.
+            # The http_archive repo doesn't have @erlang_config in its repo
+            # mapping, so we use the canonical name resolved above.
             http_archive(
                 name = "elixir_source_{}".format(elixir.name),
                 url = elixir.url,
@@ -56,9 +64,13 @@ load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
 elixir_build(
     name = "elixir_build",
     srcs = glob(["**/*"]),
+    otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
     visibility = ["//visibility:public"],
 )
-""",
+""".format(
+                    erlang_config_repo = erlang_config_repo,
+                    otp = elixir.otp,
+                ),
             )
 
         for elixir in mod.tags.internal_elixir_from_github_release:
@@ -75,7 +87,9 @@ elixir_build(
             target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
             exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
 
-            # Create repository for downloading and building Elixir source
+            # Create repository for downloading and building Elixir source.
+            # The http_archive repo doesn't have @erlang_config in its repo
+            # mapping, so we use the canonical name resolved above.
             http_archive(
                 name = "elixir_source_{}".format(elixir.name),
                 url = url,
@@ -87,9 +101,13 @@ load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
 elixir_build(
     name = "elixir_build",
     srcs = glob(["**/*"]),
+    otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
     visibility = ["//visibility:public"],
 )
-""",
+""".format(
+                    erlang_config_repo = erlang_config_repo,
+                    otp = elixir.otp,
+                ),
             )
 
     _elixir_config_rule(
@@ -120,6 +138,10 @@ internal_elixir_from_http_archive = tag_class(attrs = {
     "url": attr.string(),
     "strip_prefix": attr.string(),
     "sha256": attr.string(),
+    "otp": attr.string(
+        mandatory = True,
+        doc = "Name of an erlang_config installation to use for building Elixir (e.g. '25_bootstrap').",
+    ),
     "exec_compatible_with": attr.label_list(default = []),
     "target_compatible_with": attr.label_list(default = []),
 })
@@ -133,6 +155,10 @@ internal_elixir_from_github_release = tag_class(attrs = {
     ),
     "sha256": attr.string(
         default = DEFAULT_ELIXIR_SHA256,
+    ),
+    "otp": attr.string(
+        mandatory = True,
+        doc = "Name of an erlang_config installation to use for building Elixir (e.g. '25_bootstrap').",
     ),
     # NOTE: these should default to the host platform
     "exec_compatible_with": attr.label_list(default = []),
