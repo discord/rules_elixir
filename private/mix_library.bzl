@@ -44,7 +44,7 @@ def _mix_library_impl(ctx):
     # should instead return a Provider that can provide erlang...library info?
     # TBD
     # This also needs a better name
-    ebin = ctx.actions.declare_directory("ebin")
+    ebin = ctx.actions.declare_directory(ctx.label.name + "_ebin")
 
     # Create individual priv file symlinks rather than a directory artifact.
     # A directory artifact named "priv" causes path doubling (priv/priv/...)
@@ -210,9 +210,15 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
         mnemonic = "MIXCOMPILE",
     )
 
+    dep_runfiles = [dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps if DefaultInfo in dep]
+    lib_runfiles = ctx.runfiles(files = [ebin] + priv_files + ctx.files.data)
+    for dr in dep_runfiles:
+        lib_runfiles = lib_runfiles.merge(dr)
+
     return [
         DefaultInfo(
             files = depset([ebin] + priv_files),
+            runfiles = lib_runfiles,
         ),
         MixProjectInfo(
             # app_name = ctx.attr.app_name,

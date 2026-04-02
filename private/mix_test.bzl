@@ -88,7 +88,7 @@ DEPS_DIR="$(realpath {erl_libs_dir})"
 # With --no-compile, Mix is read-only — symlinks avoid copying entirely.
 # Mix manages app code paths from _build; no -pa flags needed for deps.
 mkdir -p _build/test/lib/{app_name}
-ln -s "$(realpath ebin)" _build/test/lib/{app_name}/ebin
+ln -s "$(realpath {beam_dir})" _build/test/lib/{app_name}/ebin
 {priv_symlink}
 
 for app_dir in "$DEPS_DIR"/*; do
@@ -116,6 +116,7 @@ MIX_ENV=test \\
         elixir_home = elixir_home,
         package = package,
         app_name = app_name,
+        beam_dir = lib_beam_dirs[0].basename,
         erl_libs_dir = erl_libs_dir,
         priv_symlink = priv_symlink,
         env = env,
