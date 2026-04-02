@@ -33,7 +33,7 @@ load(
 load("//private:elixir_sys_config.bzl", _elixir_sys_config = "elixir_sys_config")
 
 # mix-backed targets. Generally fairly reliable, and set-and-forget.
-def mix_library(*args, **kwargs):
+def mix_library(name, app_name, deps = [], **kwargs):
     """Compiles an Elixir library using Mix.
 
     Automatically adds dependencies for hex unless the app_name is "hex",
@@ -41,11 +41,9 @@ def mix_library(*args, **kwargs):
     dependency is relevant in the current compilation context (even though
     we invoke in offline mode)
     """
-    deps = kwargs.pop("deps", [])
-    if kwargs.get("app_name") != "hex":
-        deps.append(Label("@hex_pm//:lib"))
-    kwargs['deps'] = deps
-    _mix_library(*args, **kwargs)
+    if app_name != "hex":
+        deps = deps + [Label("@hex_pm//:lib")]
+    _mix_library(name = name, app_name = app_name, deps = deps, **kwargs)
 
 def mix_release(*args, **kwargs):
     _mix_release(*args, **kwargs)
