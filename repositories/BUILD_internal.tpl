@@ -22,10 +22,10 @@ toolchain(
     name = "toolchain",
     exec_compatible_with = [
         "//:elixir_internal",
-    ],
+%{EXTRA_EXEC_CONSTRAINTS}    ],
     target_compatible_with = [
         "//:elixir_%{ELIXIR_VERSION_ID}",
-    ],
+%{EXTRA_TARGET_CONSTRAINTS}    ],
     toolchain = ":elixir",
     toolchain_type = "@rules_elixir//:toolchain_type",
     visibility = ["//visibility:public"],
