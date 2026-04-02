@@ -29,7 +29,13 @@ def _version_identifier(version_string):
         return parts[0]
 
 def _impl(repository_ctx):
-    elixir_installations = _default_elixir_dict(repository_ctx)
+    # Skip host Elixir detection when explicit installations are provided.
+    # The host probe produces arch-dependent results, making the lockfile
+    # non-deterministic across architectures.
+    if len(repository_ctx.attr.types) > 0:
+        elixir_installations = {}
+    else:
+        elixir_installations = _default_elixir_dict(repository_ctx)
     for name in repository_ctx.attr.types.keys():
         if name == _DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME:
             fail("'{}' is reserved as an elixir name".format(
@@ -221,7 +227,10 @@ constraint_value(
 
 """
 
-    default_installation = elixir_installations[_DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME]
+    if _DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME in elixir_installations:
+        default_installation = elixir_installations[_DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME]
+    else:
+        default_installation = elixir_installations.values()[0]
 
     build_file_content += """\
 constraint_setting(

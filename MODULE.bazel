@@ -27,9 +27,6 @@ use_repo(
     "elixir_config",
 )
 
-register_toolchains(
-    "@elixir_config//external:toolchain",
-)
 
 # Use elixir_packages extension to get hex_pm
 elixir_packages = use_extension(
