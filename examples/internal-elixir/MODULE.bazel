@@ -7,11 +7,9 @@ bazel_dep(
     name = "rules_erlang",
     version = "3.16.0",
 )
-archive_override(
+local_path_override(
     module_name = "rules_erlang",
-    integrity = "sha256-Gg1A/QyTHsHarL0EAOLhe2nTHlcnVngJLBZukcGvaOw=",
-    strip_prefix = "rules_erlang-b4b01911b99944fa0c9efb66bf3d9030ee784fa9/",
-    url = "https://github.com/discord/rules_erlang/archive/b4b01911b99944fa0c9efb66bf3d9030ee784fa9.tar.gz",
+    path = "../../../rules_erlang_2",
 )
 bazel_dep(
     name = "rules_elixir",
@@ -21,38 +19,104 @@ local_path_override(
     module_name = "rules_elixir",
     path = "../..",
 )
-
-erlang_config = use_extension(
-    "@rules_erlang//bzlmod:extensions.bzl",
-    "erlang_config",
+bazel_dep(
+    name = "rules_img",
+    version = "0.3.3",
 )
+bazel_dep(
+    name = "rules_distroless",
+    version = "0.0.0",
+)
+local_path_override(
+    module_name = "rules_distroless",
+    path = "/home/discord/rules_distroless",
+)
+bazel_dep(
+    name = "platforms",
+    version = "1.0.0",
+)
+bazel_dep(
+    name = "aspect_bazel_lib",
+    version = "2.21.2",
+)
+bazel_dep(
+    name = "rules_pkg",
+    version = "1.1.0",
+)
+
+# -- Erlang toolchains --
+# We define three OTP installations:
+#   1. bootstrap: native build, used as the bootstrap compiler for cross-compilation
+#      and as the default toolchain for BEAM compilation (no target constraints).
+#   2. x86_64: native build constrained to x86_64 targets, used for ERTS layer resolution.
+#   3. aarch64: cross-compiled for arm64 using the bootstrap as build-time OTP.
+
+erlang_config = use_extension("@rules_erlang//bzlmod:extensions.bzl", "erlang_config")
+
 erlang_config.internal_erlang_from_github_release(
-    name = "26_2",
+    name = "25_bootstrap",
+    extra_configure_opts = ["--without-termcap"],
     extra_make_opts = ["-j 4"],
-    sha256 = "de155c4ad9baab2b9e6c96dbd03bf955575a04dd6feee9c08758beb28484c9f6",
-    version = "26.2.5",
-)
-use_repo(
-    erlang_config,
-    "erlang_config",
+    sha256 = "99296fcd97a2053c5fcde7dc0ded2ba261a3baf1491c745fca71bd9804d51443",
+    version = "25.3.2.21",
 )
 
-elixir_config = use_extension(
-    "@rules_elixir//bzlmod:extensions.bzl",
-    "elixir_config",
+erlang_config.internal_erlang_from_github_release(
+    name = "25_x86_64",
+    extra_configure_opts = ["--without-termcap"],
+    extra_make_opts = ["-j 4"],
+    sha256 = "99296fcd97a2053c5fcde7dc0ded2ba261a3baf1491c745fca71bd9804d51443",
+    target_compatible_with = ["@platforms//cpu:x86_64"],
+    version = "25.3.2.21",
 )
+
+erlang_config.internal_erlang_from_github_release(
+    name = "25_aarch64",
+    bootstrap_otp = "25_bootstrap",
+    extra_configure_opts = ["--without-termcap"],
+    extra_make_opts = ["-j 4"],
+    host_triplet = "aarch64-linux-gnu",
+    sha256 = "99296fcd97a2053c5fcde7dc0ded2ba261a3baf1491c745fca71bd9804d51443",
+    target_compatible_with = ["@platforms//cpu:aarch64"],
+    version = "25.3.2.21",
+)
+
+use_repo(erlang_config, "erlang_config")
+
+elixir_config = use_extension("@rules_elixir//bzlmod:extensions.bzl", "elixir_config")
 elixir_config.internal_elixir_from_github_release(
-    name = "1_16",
-    sha256 = "b9e845458e03d62a24325b8424069e401cc7468e21143ecbca5514724d7cbaa0",
-    version = "1.16.1",
+    name = "1_18_4",
+    sha256 = "8e136c0a92160cdad8daa74560e0e9c6810486bd232fbce1709d40fcc426b5e0",
+    version = "1.18.4",
 )
-use_repo(
-    elixir_config,
-    "elixir_config",
+use_repo(elixir_config, "elixir_config")
+
+# Bootstrap toolchain first (no constraints — default for BEAM compilation),
+# then arch-specific toolchains for ERTS resolution under platform transitions.
+register_toolchains(
+    "@erlang_config//25_bootstrap:toolchain_major",
+    "@erlang_config//25_bootstrap:toolchain_major_minor",
+    "@erlang_config//25_x86_64:toolchain_major",
+    "@erlang_config//25_x86_64:toolchain_major_minor",
+    "@erlang_config//25_aarch64:toolchain_major",
+    "@erlang_config//25_aarch64:toolchain_major_minor",
+    "@elixir_config//1_18_4:toolchain",
 )
 
-register_toolchains(
-    "@erlang_config//26_2:toolchain_major",
-    "@erlang_config//26_2:toolchain_major_minor",
-    "@elixir_config//1_16:toolchain",
+# The erlang toolchains have exec_compatible_with = ["@erlang_config//:erlang_internal"],
+# so the host must be registered as an execution platform that carries that constraint.
+register_execution_platforms(
+    "//:erlang_internal_platform",
+)
+
+# -- Container base image --
+pull = use_repo_rule("@rules_img//img:pull.bzl", "pull")
+
+pull(
+    name = "distroless_cc_debian12_nonroot",
+    digest = "sha256:39db8a6e7ab24face1bd5e935a1785ec335517c141141f3bdcbecff28efded42",
+    layer_handling = "eager",
+    registry = "gcr.io",
+    repository = "distroless/cc-debian12",
+    tag = "nonroot",
 )
