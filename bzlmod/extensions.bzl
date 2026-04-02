@@ -23,12 +23,17 @@ def _elixir_config(ctx):
     strip_prefixs = {}
     sha256s = {}
     elixir_homes = {}
+    target_compatible_withs = {}
+    exec_compatible_withs = {}
 
     for mod in ctx.modules:
         for elixir in mod.tags.external_elixir_from_path:
             types[elixir.name] = INSTALLATION_TYPE_EXTERNAL
             versions[elixir.name] = elixir.version
             elixir_homes[elixir.name] = elixir.elixir_home
+            target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
+            exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
+
 
         for elixir in mod.tags.internal_elixir_from_http_archive:
             types[elixir.name] = INSTALLATION_TYPE_INTERNAL
@@ -36,6 +41,8 @@ def _elixir_config(ctx):
             urls[elixir.name] = elixir.url
             strip_prefixs[elixir.name] = elixir.strip_prefix
             sha256s[elixir.name] = elixir.sha256
+            target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
+            exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
 
             # Create repository for downloading and building Elixir source
             http_archive(
@@ -65,6 +72,8 @@ elixir_build(
             urls[elixir.name] = url
             strip_prefixs[elixir.name] = strip_prefix
             sha256s[elixir.name] = elixir.sha256
+            target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
+            exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
 
             # Create repository for downloading and building Elixir source
             http_archive(
@@ -91,12 +100,18 @@ elixir_build(
         strip_prefixs = strip_prefixs,
         sha256s = sha256s,
         elixir_homes = elixir_homes,
+        exec_compatible_withs = exec_compatible_withs,
+        target_compatible_withs = target_compatible_withs,
     )
 
 external_elixir_from_path = tag_class(attrs = {
     "name": attr.string(),
     "version": attr.string(),
     "elixir_home": attr.string(),
+    # It doesn't...really make sense to have an exec_compatible_with for an
+    # extenral toolchain that's already on the host?
+    "exec_compatible_with": attr.label_list(default = []),
+    "target_compatible_with": attr.label_list(default = []),
 })
 
 internal_elixir_from_http_archive = tag_class(attrs = {
@@ -105,6 +120,8 @@ internal_elixir_from_http_archive = tag_class(attrs = {
     "url": attr.string(),
     "strip_prefix": attr.string(),
     "sha256": attr.string(),
+    "exec_compatible_with": attr.label_list(default = []),
+    "target_compatible_with": attr.label_list(default = []),
 })
 
 internal_elixir_from_github_release = tag_class(attrs = {
@@ -117,6 +134,9 @@ internal_elixir_from_github_release = tag_class(attrs = {
     "sha256": attr.string(
         default = DEFAULT_ELIXIR_SHA256,
     ),
+    # NOTE: these should default to the host platform
+    "exec_compatible_with": attr.label_list(default = []),
+    "target_compatible_with": attr.label_list(default = []),
 })
 
 elixir_config = module_extension(

@@ -12,6 +12,15 @@ _ELIXIR_VERSION_UNKNOWN = "UNKNOWN"
 INSTALLATION_TYPE_EXTERNAL = "external"
 INSTALLATION_TYPE_INTERNAL = "internal"
 
+def _format_constraints(constraints):
+    if not constraints:
+        return ""
+    else:
+        return "    " + ",\n    ".join([
+            ('"%s"' % constraint)
+            for constraint in constraints
+        ])
+
 def _version_identifier(version_string):
     parts = version_string.split(".", 2)
     if len(parts) > 1:
@@ -36,6 +45,8 @@ def _impl(repository_ctx):
             strip_prefix = repository_ctx.attr.strip_prefixs.get(name, None),
             sha256 = repository_ctx.attr.sha256s.get(name, None),
             elixir_home = repository_ctx.attr.elixir_homes.get(name, None),
+            target_compatible_with = repository_ctx.attr.target_compatible_withs.get(name, None),
+            exec_compatible_with = repository_ctx.attr.exec_compatible_withs.get(name, None),
         )
 
     for (name, props) in elixir_installations.items():
@@ -46,6 +57,9 @@ def _impl(repository_ctx):
                 {
                     "%{ELIXIR_HOME}": props.elixir_home,
                     "%{ELIXIR_VERSION_ID}": props.identifier,
+                    # again, i don't...really think it makes sense sense to do
+                    # exec_compatible_with for stuff that's on the host system?
+                    "%{EXTRA_TARGET_CONSTRAINTS}": _format_constraints(props.target_compatible_with),
                 },
                 False,
             )
@@ -59,6 +73,8 @@ def _impl(repository_ctx):
                     "%{SHA_256}": props.sha256 or "",
                     "%{ELIXIR_VERSION_ID}": props.identifier,
                     "%{ELIXIR_NAME}": name,
+                    "%{EXTRA_EXEC_CONSTRAINTS}": _format_constraints(props.exec_compatible_with),
+                    "%{EXTRA_TARGET_CONSTRAINTS}": _format_constraints(props.target_compatible_with),
                 },
                 False,
             )
@@ -98,6 +114,8 @@ elixir_config = repository_rule(
         "strip_prefixs": attr.string_dict(),
         "sha256s": attr.string_dict(),
         "elixir_homes": attr.string_dict(),
+        "exec_compatible_withs": attr.string_list_dict(),
+        "target_compatible_withs": attr.string_list_dict(),
     },
     environ = [
         ELIXIR_HOME_ENV_VAR,
@@ -160,6 +178,10 @@ def _default_elixir_dict(repository_ctx):
                 version = version,
                 identifier = identifier,
                 elixir_home = elixir_home,
+                # XXX: this is probably not what we want to commit, but will be
+                # fine during iteration.
+                target_compatible_with = None,
+                exec_compatible_with = None,
             ),
         }
     else:
@@ -169,6 +191,10 @@ def _default_elixir_dict(repository_ctx):
                 version = _ELIXIR_VERSION_UNKNOWN,
                 identifier = _ELIXIR_VERSION_UNKNOWN.lower(),
                 elixir_home = elixir_home,
+                # XXX: this is probably not what we want to commit, but will be
+                # fine during iteration.
+                target_compatible_with = None,
+                exec_compatible_with = None,
             ),
         }
 
