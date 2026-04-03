@@ -53,6 +53,7 @@ def _impl(repository_ctx):
             elixir_home = repository_ctx.attr.elixir_homes.get(name, None),
             target_compatible_with = repository_ctx.attr.target_compatible_withs.get(name, None),
             exec_compatible_with = repository_ctx.attr.exec_compatible_withs.get(name, None),
+            erlang_version = repository_ctx.attr.erlang_versions.get(name, None),
         )
 
     for (name, props) in elixir_installations.items():
@@ -122,6 +123,7 @@ elixir_config = repository_rule(
         "elixir_homes": attr.string_dict(),
         "exec_compatible_withs": attr.string_list_dict(),
         "target_compatible_withs": attr.string_list_dict(),
+        "erlang_versions": attr.string_dict(),
     },
     environ = [
         ELIXIR_HOME_ENV_VAR,
@@ -240,18 +242,40 @@ constraint_setting(
 
 """.format(default_installation.identifier)
 
-    unique_identifiers = {
-        props.identifier: name
-        for (name, props) in elixir_installations.items()
-    }.keys()
+    # Collect unique identifiers and their paired erlang versions.
+    # When multiple installations share an identifier, the last one wins
+    # (same as the old behavior for the identifier set).
+    identifier_erlang_versions = {}
+    for (name, props) in elixir_installations.items():
+        identifier_erlang_versions[props.identifier] = getattr(props, "erlang_version", None)
 
-    for identifier in unique_identifiers:
+    for (identifier, erlang_version) in identifier_erlang_versions.items():
         build_file_content += """\
 constraint_value(
     name = "elixir_{identifier}",
     constraint_setting = ":elixir_version",
 )
 
+""".format(identifier = identifier)
+
+        # Generate a platform with both elixir_version and (if known)
+        # erlang_version constraints. The erlang constraint enables correct
+        # toolchain resolution when platform_independent_transition replaces
+        # --platforms with this synthetic platform.
+        if erlang_version:
+            erlang_version_id = _version_identifier(erlang_version)
+            build_file_content += """\
+platform(
+    name = "elixir_{identifier}_platform",
+    constraint_values = [
+        ":elixir_{identifier}",
+        "@erlang_config//:erlang_{erlang_version_id}",
+    ],
+)
+
+""".format(identifier = identifier, erlang_version_id = erlang_version_id)
+        else:
+            build_file_content += """\
 platform(
     name = "elixir_{identifier}_platform",
     constraint_values = [

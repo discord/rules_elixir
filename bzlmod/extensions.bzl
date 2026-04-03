@@ -31,6 +31,7 @@ def _elixir_config(ctx):
     elixir_homes = {}
     target_compatible_withs = {}
     exec_compatible_withs = {}
+    erlang_versions = {}
 
     for mod in ctx.modules:
         for elixir in mod.tags.external_elixir_from_path:
@@ -49,6 +50,8 @@ def _elixir_config(ctx):
             sha256s[elixir.name] = elixir.sha256
             target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
             exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
+            if elixir.erlang_version:
+                erlang_versions[elixir.name] = elixir.erlang_version
 
             # Create repository for downloading and building Elixir source.
             # The http_archive repo doesn't have @erlang_config in its repo
@@ -86,6 +89,8 @@ elixir_build(
             sha256s[elixir.name] = elixir.sha256
             target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
             exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
+            if elixir.erlang_version:
+                erlang_versions[elixir.name] = elixir.erlang_version
 
             # Create repository for downloading and building Elixir source.
             # The http_archive repo doesn't have @erlang_config in its repo
@@ -120,6 +125,7 @@ elixir_build(
         elixir_homes = elixir_homes,
         exec_compatible_withs = exec_compatible_withs,
         target_compatible_withs = target_compatible_withs,
+        erlang_versions = erlang_versions,
     )
 
 external_elixir_from_path = tag_class(attrs = {
@@ -142,6 +148,10 @@ internal_elixir_from_http_archive = tag_class(attrs = {
         mandatory = True,
         doc = "Name of an erlang_config installation to use for building Elixir (e.g. '25_bootstrap').",
     ),
+    "erlang_version": attr.string(
+        doc = "OTP version string (e.g. '26.3') for generating combined platform constraints. " +
+              "Must match the version of the OTP installation named by the 'otp' attr.",
+    ),
     "exec_compatible_with": attr.label_list(default = []),
     "target_compatible_with": attr.label_list(default = []),
 })
@@ -159,6 +169,10 @@ internal_elixir_from_github_release = tag_class(attrs = {
     "otp": attr.string(
         mandatory = True,
         doc = "Name of an erlang_config installation to use for building Elixir (e.g. '25_bootstrap').",
+    ),
+    "erlang_version": attr.string(
+        doc = "OTP version string (e.g. '26.3') for generating combined platform constraints. " +
+              "Must match the version of the OTP installation named by the 'otp' attr.",
     ),
     # NOTE: these should default to the host platform
     "exec_compatible_with": attr.label_list(default = []),
