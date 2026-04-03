@@ -47,7 +47,7 @@ def _mix_compile_impl(ctx):
     # should instead return a Provider that can provide erlang...library info?
     # TBD
     # This also needs a better name
-    ebin = ctx.actions.declare_directory("ebin")
+    ebin = ctx.actions.declare_directory(ctx.label.name + "_ebin")
 
     erl_libs_dir = ctx.label.name + "_deps"
 
@@ -255,7 +255,10 @@ def _mix_priv_impl(ctx):
         ctx.actions.symlink(output = out, target_file = priv_file)
         priv_files.append(out)
 
-    return [DefaultInfo(files = depset(priv_files))]
+    return [DefaultInfo(
+        files = depset(priv_files),
+        runfiles = ctx.runfiles(files = priv_files),
+    )]
 
 _mix_priv = rule(
     implementation = _mix_priv_impl,
@@ -276,9 +279,20 @@ def _mix_library_info_impl(ctx):
 
     all_deps = flat_deps(ctx.attr.deps)
 
+    dep_runfiles = [dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps if DefaultInfo in dep]
+    lib_runfiles = ctx.runfiles(files = compile_files + priv_files + ctx.files.data)
+    compile_runfiles = ctx.attr.compile[DefaultInfo].default_runfiles
+    if compile_runfiles:
+        lib_runfiles = lib_runfiles.merge(compile_runfiles)
+    if ctx.attr.priv_target and ctx.attr.priv_target[DefaultInfo].default_runfiles:
+        lib_runfiles = lib_runfiles.merge(ctx.attr.priv_target[DefaultInfo].default_runfiles)
+    for dr in dep_runfiles:
+        lib_runfiles = lib_runfiles.merge(dr)
+
     return [
         DefaultInfo(
             files = depset(compile_files + priv_files),
+            runfiles = lib_runfiles,
         ),
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
@@ -332,6 +346,9 @@ _mix_library_info = rule(
         ),
         "compile": attr.label(mandatory = True),
         "priv_target": attr.label(),
+        "data": attr.label_list(
+            allow_files = True,
+        ),
         "deps": attr.label_list(
             providers = [ErlangAppInfo],
         ),
@@ -369,6 +386,7 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
     info_kwargs = {k: v for k, v in kwargs.items() if k in (
         "mix_env",
         "mix_config",
+        "data",
         "deps",
         "srcs",
         "include",
