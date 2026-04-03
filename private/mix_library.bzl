@@ -206,7 +206,6 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
 
 _mix_compile = rule(
     implementation = _mix_compile_impl,
-    cfg = platform_independent_transition,
     attrs = {
         "app_name": attr.string(mandatory = True),
         "mix_env": attr.string(
@@ -220,16 +219,12 @@ _mix_compile = rule(
             default = ":mix.exs",
         ),
         "srcs": attr.label_list(
-            # TODO: is there a more comprehensive place I can find all
-            # supported extensions than just adding them as I find them? There
-            # are a lot of weird extensions...
             allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
         ),
         "data": attr.label_list(
             allow_files = True,
         ),
         "deps": attr.label_list(
-            # TODO: need to confirm the provider we create also outputs this
             providers = [ErlangAppInfo],
         ),
         "priv": attr.label_list(
@@ -238,12 +233,10 @@ _mix_compile = rule(
         "include": attr.label_list(
             allow_files = [".hrl"],
         ),
-        # TODO: we should probably set a default for this?
         "ez_deps": attr.label_list(
             allow_files = [".ez"],
         ),
     },
-    # TODO: confirm(??) (????)
     toolchains = ["//:toolchain_type"],
 )
 
@@ -381,7 +374,10 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         "include",
     )}
 
-    # Platform-independent: mix compile → ebin/
+    # mix compile runs without a platform transition so that native deps
+    # resolve with full CPU/OS constraints. Unfortunately that means we
+    # compile elixir BEAM twice in multi-arch cases, but the redundancy is
+    # acceptable to also ensure we don't mix and match OTP versions.
     _mix_compile(
         name = name + "_compile",
         app_name = app_name,
