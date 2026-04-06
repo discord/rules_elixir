@@ -12,6 +12,15 @@ _ELIXIR_VERSION_UNKNOWN = "UNKNOWN"
 INSTALLATION_TYPE_EXTERNAL = "external"
 INSTALLATION_TYPE_INTERNAL = "internal"
 
+def _format_constraints(constraints):
+    if not constraints:
+        return ""
+    else:
+        return "    " + ",\n    ".join([
+            ('"%s"' % constraint)
+            for constraint in constraints
+        ])
+
 def _version_identifier(version_string):
     parts = version_string.split(".", 2)
     if len(parts) > 1:
@@ -20,7 +29,13 @@ def _version_identifier(version_string):
         return parts[0]
 
 def _impl(repository_ctx):
-    elixir_installations = _default_elixir_dict(repository_ctx)
+    # Skip host Elixir detection when explicit installations are provided.
+    # The host probe produces arch-dependent results, making the lockfile
+    # non-deterministic across architectures.
+    if len(repository_ctx.attr.types) > 0:
+        elixir_installations = {}
+    else:
+        elixir_installations = _default_elixir_dict(repository_ctx)
     for name in repository_ctx.attr.types.keys():
         if name == _DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME:
             fail("'{}' is reserved as an elixir name".format(
@@ -36,6 +51,9 @@ def _impl(repository_ctx):
             strip_prefix = repository_ctx.attr.strip_prefixs.get(name, None),
             sha256 = repository_ctx.attr.sha256s.get(name, None),
             elixir_home = repository_ctx.attr.elixir_homes.get(name, None),
+            target_compatible_with = repository_ctx.attr.target_compatible_withs.get(name, None),
+            exec_compatible_with = repository_ctx.attr.exec_compatible_withs.get(name, None),
+            erlang_version = repository_ctx.attr.erlang_versions.get(name, None),
         )
 
     for (name, props) in elixir_installations.items():
@@ -46,6 +64,9 @@ def _impl(repository_ctx):
                 {
                     "%{ELIXIR_HOME}": props.elixir_home,
                     "%{ELIXIR_VERSION_ID}": props.identifier,
+                    # again, i don't...really think it makes sense sense to do
+                    # exec_compatible_with for stuff that's on the host system?
+                    "%{EXTRA_TARGET_CONSTRAINTS}": _format_constraints(props.target_compatible_with),
                 },
                 False,
             )
@@ -59,6 +80,8 @@ def _impl(repository_ctx):
                     "%{SHA_256}": props.sha256 or "",
                     "%{ELIXIR_VERSION_ID}": props.identifier,
                     "%{ELIXIR_NAME}": name,
+                    "%{EXTRA_EXEC_CONSTRAINTS}": _format_constraints(props.exec_compatible_with),
+                    "%{EXTRA_TARGET_CONSTRAINTS}": _format_constraints(props.target_compatible_with),
                 },
                 False,
             )
@@ -98,6 +121,9 @@ elixir_config = repository_rule(
         "strip_prefixs": attr.string_dict(),
         "sha256s": attr.string_dict(),
         "elixir_homes": attr.string_dict(),
+        "exec_compatible_withs": attr.string_list_dict(),
+        "target_compatible_withs": attr.string_list_dict(),
+        "erlang_versions": attr.string_dict(),
     },
     environ = [
         ELIXIR_HOME_ENV_VAR,
@@ -160,6 +186,10 @@ def _default_elixir_dict(repository_ctx):
                 version = version,
                 identifier = identifier,
                 elixir_home = elixir_home,
+                # XXX: this is probably not what we want to commit, but will be
+                # fine during iteration.
+                target_compatible_with = None,
+                exec_compatible_with = None,
             ),
         }
     else:
@@ -169,6 +199,10 @@ def _default_elixir_dict(repository_ctx):
                 version = _ELIXIR_VERSION_UNKNOWN,
                 identifier = _ELIXIR_VERSION_UNKNOWN.lower(),
                 elixir_home = elixir_home,
+                # XXX: this is probably not what we want to commit, but will be
+                # fine during iteration.
+                target_compatible_with = None,
+                exec_compatible_with = None,
             ),
         }
 
@@ -195,7 +229,10 @@ constraint_value(
 
 """
 
-    default_installation = elixir_installations[_DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME]
+    if _DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME in elixir_installations:
+        default_installation = elixir_installations[_DEFAULT_EXTERNAL_ELIXIR_PACKAGE_NAME]
+    else:
+        default_installation = elixir_installations.values()[0]
 
     build_file_content += """\
 constraint_setting(
@@ -205,18 +242,40 @@ constraint_setting(
 
 """.format(default_installation.identifier)
 
-    unique_identifiers = {
-        props.identifier: name
-        for (name, props) in elixir_installations.items()
-    }.keys()
+    # Collect unique identifiers and their paired erlang versions.
+    # When multiple installations share an identifier, the last one wins
+    # (same as the old behavior for the identifier set).
+    identifier_erlang_versions = {}
+    for (name, props) in elixir_installations.items():
+        identifier_erlang_versions[props.identifier] = getattr(props, "erlang_version", None)
 
-    for identifier in unique_identifiers:
+    for (identifier, erlang_version) in identifier_erlang_versions.items():
         build_file_content += """\
 constraint_value(
     name = "elixir_{identifier}",
     constraint_setting = ":elixir_version",
 )
 
+""".format(identifier = identifier)
+
+        # Generate a platform with both elixir_version and (if known)
+        # erlang_version constraints. The erlang constraint enables correct
+        # toolchain resolution when platform_independent_transition replaces
+        # --platforms with this synthetic platform.
+        if erlang_version:
+            erlang_version_id = _version_identifier(erlang_version)
+            build_file_content += """\
+platform(
+    name = "elixir_{identifier}_platform",
+    constraint_values = [
+        ":elixir_{identifier}",
+        "@erlang_config//:erlang_{erlang_version_id}",
+    ],
+)
+
+""".format(identifier = identifier, erlang_version_id = erlang_version_id)
+        else:
+            build_file_content += """\
 platform(
     name = "elixir_{identifier}_platform",
     constraint_values = [

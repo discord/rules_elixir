@@ -9,6 +9,7 @@ load(
     "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
+load("//private:beam_transitions.bzl", "platform_independent_transition")
 
 def _priv_file_dest_relative_path(label, f):
     """Calculate the relative path for a priv file, preserving directory structure.
@@ -39,24 +40,14 @@ def _elixir_erl_libs_args(paths):
     lib_dirs = " ".join(paths)
     return "-pa " + lib_dirs
 
-def _mix_library_impl(ctx):
+# --- _mix_compile: platform-independent compilation ---
+
+def _mix_compile_impl(ctx):
     # TODO: i don't _think_ we need to explicitly pass the output dir in, and
     # should instead return a Provider that can provide erlang...library info?
     # TBD
     # This also needs a better name
     ebin = ctx.actions.declare_directory(ctx.label.name + "_ebin")
-
-    # Create individual priv file symlinks rather than a directory artifact.
-    # A directory artifact named "priv" causes path doubling (priv/priv/...)
-    # in any consumer that places priv files under a priv/ directory, because
-    # additional_file_dest_relative_path returns "priv" which doesn't match
-    # the startswith("priv/") check.
-    priv_files = []
-    for priv_file in ctx.files.priv:
-        rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
-        out = ctx.actions.declare_file(path_join("priv", rel_path))
-        ctx.actions.symlink(output = out, target_file = priv_file)
-        priv_files.append(out)
 
     erl_libs_dir = ctx.label.name + "_deps"
 
@@ -96,8 +87,9 @@ def _mix_library_impl(ctx):
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
 
-    all_deps = flat_deps(ctx.attr.deps)
-
+    # Priv files are copied into the build dir as inputs (needed during
+    # compilation for NIFs, etc.) but NOT declared as outputs — priv output
+    # handling is done by _mix_priv in normal platform config.
     priv_copy_to_build_dir = ""
     if ctx.files.priv:
         build_dir_cmds = []
@@ -210,14 +202,96 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
         mnemonic = "MIXCOMPILE",
     )
 
+    return [DefaultInfo(files = depset([ebin]))]
+
+_mix_compile = rule(
+    implementation = _mix_compile_impl,
+    attrs = {
+        "app_name": attr.string(mandatory = True),
+        "mix_env": attr.string(
+            default = "prod",
+            values = ["prod", "test", "dev"],
+            doc = "The MIX_ENV to use when compiling (default: prod)",
+        ),
+        "env": attr.string_dict(),
+        "mix_config": attr.label(
+            allow_single_file = [".exs"],
+            default = ":mix.exs",
+        ),
+        "srcs": attr.label_list(
+            allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
+        ),
+        "data": attr.label_list(
+            allow_files = True,
+        ),
+        "deps": attr.label_list(
+            providers = [ErlangAppInfo],
+        ),
+        "priv": attr.label_list(
+            allow_files = True,
+        ),
+        "include": attr.label_list(
+            allow_files = [".hrl"],
+        ),
+        "ez_deps": attr.label_list(
+            allow_files = [".ez"],
+        ),
+    },
+    toolchains = ["//:toolchain_type"],
+)
+
+# --- _mix_priv: platform-dependent priv file handling ---
+
+def _mix_priv_impl(ctx):
+    # Create individual priv file symlinks rather than a directory artifact.
+    # A directory artifact named "priv" causes path doubling (priv/priv/...)
+    # in any consumer that places priv files under a priv/ directory, because
+    # additional_file_dest_relative_path returns "priv" which doesn't match
+    # the startswith("priv/") check.
+    priv_files = []
+    for priv_file in ctx.files.priv:
+        rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
+        out = ctx.actions.declare_file(path_join("priv", rel_path))
+        ctx.actions.symlink(output = out, target_file = priv_file)
+        priv_files.append(out)
+
+    return [DefaultInfo(
+        files = depset(priv_files),
+        runfiles = ctx.runfiles(files = priv_files),
+    )]
+
+_mix_priv = rule(
+    implementation = _mix_priv_impl,
+    attrs = {
+        "priv": attr.label_list(
+            allow_files = True,
+        ),
+    },
+)
+
+# --- _mix_library_info: aggregator providing ErlangAppInfo + MixProjectInfo ---
+
+def _mix_library_info_impl(ctx):
+    compile_files = ctx.attr.compile[DefaultInfo].files.to_list()
+    priv_files = []
+    if ctx.attr.priv_target:
+        priv_files = ctx.attr.priv_target[DefaultInfo].files.to_list()
+
+    all_deps = flat_deps(ctx.attr.deps)
+
     dep_runfiles = [dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps if DefaultInfo in dep]
-    lib_runfiles = ctx.runfiles(files = [ebin] + priv_files + ctx.files.data)
+    lib_runfiles = ctx.runfiles(files = compile_files + priv_files + ctx.files.data)
+    compile_runfiles = ctx.attr.compile[DefaultInfo].default_runfiles
+    if compile_runfiles:
+        lib_runfiles = lib_runfiles.merge(compile_runfiles)
+    if ctx.attr.priv_target and ctx.attr.priv_target[DefaultInfo].default_runfiles:
+        lib_runfiles = lib_runfiles.merge(ctx.attr.priv_target[DefaultInfo].default_runfiles)
     for dr in dep_runfiles:
         lib_runfiles = lib_runfiles.merge(dr)
 
     return [
         DefaultInfo(
-            files = depset([ebin] + priv_files),
+            files = depset(compile_files + priv_files),
             runfiles = lib_runfiles,
         ),
         MixProjectInfo(
@@ -250,7 +324,7 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
             deps = all_deps,
             srcs = ctx.attr.srcs,
             # TODO: beam?
-            beam = [ebin],
+            beam = compile_files,
             # Priv files with preserved directory structure
             priv = priv_files,
             # TODO: extra erlang libs to include?
@@ -261,44 +335,91 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
         ),
     ]
 
-mix_library = rule(
-    implementation = _mix_library_impl,
+_mix_library_info = rule(
+    implementation = _mix_library_info_impl,
     attrs = {
-        "app_name": attr.string(),
-        "mix_env": attr.string(
-            default = "prod",
-            values = ["prod", "test", "dev"],
-            doc = "The MIX_ENV to use when compiling (default: prod)",
-        ),
-        "env": attr.string_dict(),
+        "app_name": attr.string(mandatory = True),
+        "mix_env": attr.string(default = "prod"),
         "mix_config": attr.label(
             allow_single_file = [".exs"],
             default = ":mix.exs",
         ),
-        "srcs": attr.label_list(
-            # TODO: is there a more comprehensive place I can find all
-            # supported extensions than just adding them as I find them? There
-            # are a lot of weird extensions...
-            allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
-        ),
+        "compile": attr.label(mandatory = True),
+        "priv_target": attr.label(),
         "data": attr.label_list(
             allow_files = True,
         ),
         "deps": attr.label_list(
-            # TODO: need to confirm the provider we create also outputs this
             providers = [ErlangAppInfo],
         ),
-        "priv": attr.label_list(
-            allow_files = True,
+        "srcs": attr.label_list(
+            allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
         ),
         "include": attr.label_list(
             allow_files = [".hrl"],
         ),
-        # TODO: we should probably set a default for this?
-        "ez_deps": attr.label_list(
-            allow_files = [".ez"],
-        ),
     },
-    # TODO: confirm(??) (????)
-    toolchains = ["//:toolchain_type"],
 )
+
+# --- mix_library: composing macro ---
+
+def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
+    """Compiles an Elixir library using Mix.
+
+    Splits compilation into platform-independent (.beam/.app) and
+    platform-dependent (priv/) artifacts for cross-platform cache reuse.
+    """
+
+    # Attrs that go to _mix_compile
+    compile_kwargs = {k: v for k, v in kwargs.items() if k in (
+        "mix_env",
+        "env",
+        "mix_config",
+        "srcs",
+        "data",
+        "deps",
+        "include",
+        "ez_deps",
+    )}
+
+    # Attrs that go to _mix_library_info
+    info_kwargs = {k: v for k, v in kwargs.items() if k in (
+        "mix_env",
+        "mix_config",
+        "data",
+        "deps",
+        "srcs",
+        "include",
+    )}
+
+    # mix compile runs without a platform transition so that native deps
+    # resolve with full CPU/OS constraints. Unfortunately that means we
+    # compile elixir BEAM twice in multi-arch cases, but the redundancy is
+    # acceptable to also ensure we don't mix and match OTP versions.
+    _mix_compile(
+        name = name + "_compile",
+        app_name = app_name,
+        priv = priv,
+        visibility = ["//visibility:private"],
+        **compile_kwargs
+    )
+
+    # Platform-dependent: priv file symlinks
+    priv_target = None
+    if priv:
+        _mix_priv(
+            name = name + "_priv",
+            priv = priv,
+            visibility = ["//visibility:private"],
+        )
+        priv_target = ":" + name + "_priv"
+
+    # Aggregator: provides ErlangAppInfo + MixProjectInfo
+    _mix_library_info(
+        name = name,
+        app_name = app_name,
+        compile = ":" + name + "_compile",
+        priv_target = priv_target,
+        visibility = visibility,
+        **info_kwargs
+    )
