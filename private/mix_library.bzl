@@ -188,7 +188,7 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.data + ctx.files.include + ctx.files.priv + erl_libs_files + [ctx.file.mix_config],
+        direct = ctx.files.srcs + ctx.files.config + ctx.files.data + ctx.files.include + ctx.files.priv + erl_libs_files + [ctx.file.mix_config],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -220,6 +220,9 @@ _mix_compile = rule(
         ),
         "srcs": attr.label_list(
             allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
+        ),
+        "config": attr.label_list(
+            allow_files = [".ex", ".exs"],
         ),
         "data": attr.label_list(
             allow_files = True,
@@ -322,7 +325,7 @@ def _mix_library_info_impl(ctx):
             app_name = ctx.attr.app_name,
             # direct_deps = ctx.attr.deps,
             deps = all_deps,
-            srcs = ctx.attr.srcs,
+            srcs = ctx.attr.srcs + ctx.attr.config,
             # TODO: beam?
             beam = compile_files,
             # Priv files with preserved directory structure
@@ -343,6 +346,9 @@ _mix_library_info = rule(
         "mix_config": attr.label(
             allow_single_file = [".exs"],
             default = ":mix.exs",
+        ),
+        "config": attr.label_list(
+            allow_files = [".ex", ".exs"],
         ),
         "compile": attr.label(mandatory = True),
         "priv_target": attr.label(),
@@ -376,6 +382,7 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         "env",
         "mix_config",
         "srcs",
+        "config",
         "data",
         "deps",
         "include",
@@ -386,6 +393,7 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
     info_kwargs = {k: v for k, v in kwargs.items() if k in (
         "mix_env",
         "mix_config",
+        "config",
         "data",
         "deps",
         "srcs",
