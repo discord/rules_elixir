@@ -101,10 +101,14 @@ export HEX_OFFLINE=true
 
 mkdir -p "$OUTPUT_DIR/{mix_env}/lib"
 for app_dir in "$ERL_LIBS_PATH"/*; do
+    app_name=$(basename "$app_dir")
     if [ -d "$app_dir/ebin" ]; then
-        app_name=$(basename "$app_dir")
         mkdir -p "$OUTPUT_DIR/{mix_env}/lib/$app_name/ebin"
         cp -r "$app_dir/ebin"/* "$OUTPUT_DIR/{mix_env}/lib/$app_name/ebin/"
+    fi
+    if [ -d "$app_dir/priv" ]; then
+        mkdir -p "$OUTPUT_DIR/{mix_env}/lib/$app_name/priv"
+        cp -r "$app_dir/priv"/* "$OUTPUT_DIR/{mix_env}/lib/$app_name/priv/"
     fi
 done
 
