@@ -51,13 +51,19 @@ def mix_release(*args, **kwargs):
 def mix_test(name, lib, srcs = None, **kwargs):
     """Run mix test using pre-compiled artifacts from a mix_library.
 
-    This rule runs `mix test` on a Mix project using pre-compiled artifacts
-    from a mix_library target. The library must be compiled with mix_env="test".
+    The same `mix_library` target can serve both as a release dependency and
+    as the test target's `lib`. mix_test applies a configuration transition
+    that flips `//:mix_env` to `"test"` for the library it consumes; the
+    library's transitive dependencies are independently transitioned back to
+    `"prod"` so they don't get recompiled in test mode.
+
+    Test-only dependencies (e.g. mocking libraries) and test support sources
+    are expressed via `select()` against the `//:mix_env_test` config_setting.
 
     Args:
         name: The name of the test target
         lib: The mix_library target containing the compiled application.
-             Must be compiled with mix_env="test".
+             It will be compiled in MIX_ENV=test automatically.
         srcs: Optional list of specific test files to run. If empty, runs all tests in test/
         tools: Additional tools needed for tests
         env: Environment variables to set during test execution
@@ -67,18 +73,22 @@ def mix_test(name, lib, srcs = None, **kwargs):
 
     Example:
         ```python
-        # First, create a test library compiled with MIX_ENV=test
         mix_library(
-            name = "my_app_test_lib",
+            name = "my_app",
             app_name = "my_app",
-            mix_env = "test",
-            srcs = glob(["lib/**/*.ex"]),
+            srcs = glob(["lib/**/*.ex"]) + select({
+                "@rules_elixir//:mix_env_test": glob(["test/support/**/*.ex"]),
+                "//conditions:default": [],
+            }),
+            deps = COMMON_DEPS + select({
+                "@rules_elixir//:mix_env_test": ["@hex_pm//:mox"],
+                "//conditions:default": [],
+            }),
         )
 
-        # Then create the test target
         mix_test(
             name = "my_app_test",
-            lib = ":my_app_test_lib",
+            lib = ":my_app",
             srcs = glob(["test/**/*.exs"]),
             mix_test_opts = ["--trace"],
         )

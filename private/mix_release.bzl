@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
 
@@ -11,6 +12,10 @@ load(
     "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
+load(
+    "//private:mix_env_transitions.bzl",
+    "mix_env_release_attr_override",
+)
 load(":release_info.bzl", "ReleaseInfo", "create_release_info")
 
 def _mix_release_impl(ctx):
@@ -18,19 +23,23 @@ def _mix_release_impl(ctx):
 
     erl_libs_dir = ctx.label.name + "_deps"
 
-    erlang_info = ctx.attr.application[ErlangAppInfo]
+    application = ctx.attr.application
+    erlang_info = application[ErlangAppInfo]
 
     # Determine the release name and environment
     release_name = ctx.attr.release_name if ctx.attr.release_name else ctx.label.name
     app_name = ctx.attr.app_name if ctx.attr.app_name else erlang_info.app_name
-    mix_env = ctx.attr.mix_env
+    # The rule-level mix_env_release_attr_override transition has already
+    # pinned the flag to the effective env (attr.mix_env or "prod"), so we
+    # read from there rather than re-deriving from the attribute.
+    mix_env = ctx.attr._mix_env_flag[BuildSettingInfo].value
 
     env = "\n".join([
         "export {}={}".format(k, ctx.expand_location(v, ctx.attr.data))
         for k, v in ctx.attr.env.items()
     ])
 
-    all_deps = [ctx.attr.application] + erlang_info.deps
+    all_deps = [application] + erlang_info.deps
 
     # NOTE: cargo-culted, needs further understanding
     erl_libs_files = erl_libs_contents(
@@ -57,7 +66,7 @@ def _mix_release_impl(ctx):
     # NOTE: end cargo-cult
 
     # this has to be a label, instead of a string
-    app_config_file = ctx.attr.application[MixProjectInfo].mix_config
+    app_config_file = application[MixProjectInfo].mix_config
     extra_src_files = []
     for src in ctx.attr.configs:
         extra_src_files.extend(src[DefaultInfo].files.to_list())
@@ -203,6 +212,7 @@ awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n
 mix_release = rule(
     implementation = _mix_release_impl,
     executable = True,
+    cfg = mix_env_release_attr_override,
     attrs = {
         # Existing attributes
         "app_name": attr.string(
@@ -210,7 +220,9 @@ mix_release = rule(
         ),
         "application": attr.label(
             providers = [MixProjectInfo, ErlangAppInfo],
-            doc = "The Mix application to create a release for",
+            doc = "The Mix application to create a release for. The release's " +
+                  "configuration (driven by this rule's `mix_env` attribute) " +
+                  "propagates to the application.",
         ),
         "configs": attr.label_list(
             # Mix configuration files are only evaluated at release time, and
@@ -243,9 +255,16 @@ mix_release = rule(
             doc = "Custom environment variables to set during the release build.",
         ),
         "mix_env": attr.string(
-            default = "prod",
-            values = ["prod", "dev", "test", "staging"],
-            doc = """Build environment for the release.
+            default = "",
+            doc = """Optional override for the release's MIX_ENV.
+
+            When unset (default), the release inherits the //:mix_env build
+            setting flag (which defaults to "prod"). When set, this value is
+            applied as a rule-level configuration transition that pins the
+            flag for this target's own configuration. The release's
+            `application` is then transitioned back to "prod" at the
+            application boundary, unless its own `mix_env` attribute also
+            overrides.
 
             Affects:
             - Which configuration files are used
@@ -253,6 +272,7 @@ mix_release = rule(
             - Runtime behavior
             """,
         ),
+        "_mix_env_flag": attr.label(default = "//:mix_env"),
         "release_name": attr.string(
             doc = """Override the release name.
 

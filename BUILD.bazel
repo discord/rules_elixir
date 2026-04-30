@@ -15,6 +15,30 @@ string_flag(
     visibility = ["//visibility:public"],
 )
 
+string_flag(
+    name = "mix_env",
+    build_setting_default = "prod",
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "mix_env_test",
+    flag_values = {":mix_env": "test"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "mix_env_prod",
+    flag_values = {":mix_env": "prod"},
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "mix_env_dev",
+    flag_values = {":mix_env": "dev"},
+    visibility = ["//visibility:public"],
+)
+
 toolchain_type(
     name = "toolchain_type",
     visibility = ["//visibility:public"],

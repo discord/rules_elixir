@@ -2,29 +2,25 @@ load("@rules_erlang//:escript.bzl", "escript_archive")
 
 load("@rules_elixir//:defs.bzl", "elixir_app", "ex_unit_test", "mix_library", "mix_test")
 
-# Production library
+# Single library for both prod and test. mix_test transitions //:mix_env=test
+# at its `lib` edge; the deps reset to prod automatically. select() against
+# //:mix_env_test (or the local alias) lets you pull in test-only deps and
+# srcs without a separate target.
 mix_library(
     name = "basic",
     # TODO: we should generate this target, and elicit this name from the mix
     # configuration
     app_name = "main",
     mix_config = ":mix.exs",
-    srcs = glob(['lib/**/*.ex']),
+    srcs = glob(['lib/**/*.ex']) + select({
+        "@rules_elixir//:mix_env_test": glob(['test/support/**/*.ex'], allow_empty = True),
+        "//conditions:default": [],
+    }),
 )
 
-# Test library (compiled with MIX_ENV=test)
-mix_library(
-    name = "basic_test_lib",
-    app_name = "main",
-    mix_env = "test",
-    mix_config = ":mix.exs",
-    srcs = glob(['lib/**/*.ex']),
-)
-
-# Test runner using pre-compiled artifacts
 mix_test(
     name = "basic_test",
-    lib = ":basic_test_lib",
+    lib = ":basic",
     srcs = glob(['test/**/*.exs']),
     env = {
         "ERL_COMPILER_OPTIONS": "deterministic",

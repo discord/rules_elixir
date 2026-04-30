@@ -8,15 +8,14 @@ load(
     "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
+load("//private:mix_env_transitions.bzl", "mix_env_to_test")
 
 def _mix_test_impl(ctx):
-    lib_erlang_info = ctx.attr.lib[ErlangAppInfo]
-    lib_mix_info = ctx.attr.lib[MixProjectInfo]
-
-    if lib_mix_info.mix_env != "test":
-        fail("mix_test requires a mix_library compiled with mix_env='test'. " +
-             "Target '{}' was compiled with mix_env='{}'. ".format(ctx.attr.lib.label, lib_mix_info.mix_env) +
-             "Create a separate mix_library with mix_env='test' for testing.")
+    # ctx.attr.lib goes through the mix_env_to_test transition. Outgoing-edge
+    # transitions on attributes always surface as lists, even for 1:1 transitions.
+    lib = ctx.attr.lib[0]
+    lib_erlang_info = lib[ErlangAppInfo]
+    lib_mix_info = lib[MixProjectInfo]
 
     app_name = lib_erlang_info.app_name
     mix_config = lib_mix_info.mix_config
@@ -136,7 +135,7 @@ MIX_ENV=test \\
     runfiles = erlang_runfiles.merge(elixir_runfiles)
     runfiles = runfiles.merge_all(
         [
-            ctx.attr.lib[DefaultInfo].default_runfiles,
+            lib[DefaultInfo].default_runfiles,
             ctx.runfiles(
                 ctx.files.srcs +
                 ctx.files.data +
@@ -161,7 +160,10 @@ mix_test = rule(
         "lib": attr.label(
             mandatory = True,
             providers = [ErlangAppInfo, MixProjectInfo],
-            doc = "The mix_library target containing compiled application (must have mix_env='test')",
+            cfg = mix_env_to_test,
+            doc = "The mix_library target to test. Compiled with MIX_ENV=test " +
+                  "via an automatic configuration transition; the same target " +
+                  "can also be consumed by mix_release in prod mode.",
         ),
         "srcs": attr.label_list(
             allow_files = [".exs"],

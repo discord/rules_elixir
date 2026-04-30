@@ -1,4 +1,5 @@
 load("@bazel_skylib//lib:shell.bzl", "shell")
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo", "flat_deps")
 load("@rules_erlang//:util.bzl", "path_join")
 load("@rules_erlang//private:util.bzl", "erl_libs_contents")
@@ -9,7 +10,11 @@ load(
     "maybe_install_erlang",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
-load("//private:beam_transitions.bzl", "platform_independent_transition")
+load(
+    "//private:mix_env_transitions.bzl",
+    "mix_env_attr_override",
+    "mix_env_to_prod",
+)
 
 def _priv_file_dest_relative_path(label, f):
     """Calculate the relative path for a priv file, preserving directory structure.
@@ -42,12 +47,22 @@ def _elixir_erl_libs_args(paths):
 
 # --- _mix_compile: platform-independent compilation ---
 
+def _resolve_mix_env(ctx):
+    """Effective MIX_ENV from the //:mix_env flag.
+
+    The rule-level mix_env_attr_override transition has already pinned the
+    flag to the attribute value if one was set, so reading the flag here
+    yields the effective env.
+    """
+    return ctx.attr._mix_env_flag[BuildSettingInfo].value
+
 def _mix_compile_impl(ctx):
     # TODO: i don't _think_ we need to explicitly pass the output dir in, and
     # should instead return a Provider that can provide erlang...library info?
     # TBD
     # This also needs a better name
     ebin = ctx.actions.declare_directory(ctx.label.name + "_ebin")
+    mix_env = _resolve_mix_env(ctx)
 
     erl_libs_dir = ctx.label.name + "_deps"
 
@@ -178,7 +193,7 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
         erl_libs_path = erl_libs_path,
         build_dir = ctx.file.mix_config.dirname,
         name = ctx.label.name,
-        mix_env = ctx.attr.mix_env,
+        mix_env = mix_env,
         env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
@@ -206,13 +221,16 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
 
 _mix_compile = rule(
     implementation = _mix_compile_impl,
+    cfg = mix_env_attr_override,
     attrs = {
         "app_name": attr.string(mandatory = True),
         "mix_env": attr.string(
-            default = "prod",
-            values = ["prod", "test", "dev"],
-            doc = "The MIX_ENV to use when compiling (default: prod)",
+            default = "",
+            doc = "Optional override; when set, pins this target's MIX_ENV " +
+                  "to this value regardless of the //:mix_env flag. " +
+                  "Leave empty to inherit from the flag.",
         ),
+        "_mix_env_flag": attr.label(default = "//:mix_env"),
         "env": attr.string_dict(),
         "mix_config": attr.label(
             allow_single_file = [".exs"],
@@ -229,6 +247,7 @@ _mix_compile = rule(
         ),
         "deps": attr.label_list(
             providers = [ErlangAppInfo],
+            cfg = mix_env_to_prod,
         ),
         "priv": attr.label_list(
             allow_files = True,
@@ -280,6 +299,7 @@ def _mix_library_info_impl(ctx):
     if ctx.attr.priv_target:
         priv_files = ctx.attr.priv_target[DefaultInfo].files.to_list()
 
+    mix_env = _resolve_mix_env(ctx)
     all_deps = flat_deps(ctx.attr.deps)
 
     dep_runfiles = [dep[DefaultInfo].default_runfiles for dep in ctx.attr.deps if DefaultInfo in dep]
@@ -300,7 +320,7 @@ def _mix_library_info_impl(ctx):
         MixProjectInfo(
             # app_name = ctx.attr.app_name,
             mix_config = ctx.file.mix_config,
-            mix_env = ctx.attr.mix_env,
+            mix_env = mix_env,
             # ebin = '/'.join([ebin.path, 'ebin', 'lib', ctx.attr.app_name, 'ebin']),
             # TODO: should we actually keep this, or should be just YEET the
             # consolidated directory? it seems only have dependencies
@@ -340,9 +360,15 @@ def _mix_library_info_impl(ctx):
 
 _mix_library_info = rule(
     implementation = _mix_library_info_impl,
+    cfg = mix_env_attr_override,
     attrs = {
         "app_name": attr.string(mandatory = True),
-        "mix_env": attr.string(default = "prod"),
+        "mix_env": attr.string(
+            default = "",
+            doc = "Optional override; when set, pins this target's MIX_ENV " +
+                  "to this value regardless of the //:mix_env flag.",
+        ),
+        "_mix_env_flag": attr.label(default = "//:mix_env"),
         "mix_config": attr.label(
             allow_single_file = [".exs"],
             default = ":mix.exs",
@@ -357,6 +383,7 @@ _mix_library_info = rule(
         ),
         "deps": attr.label_list(
             providers = [ErlangAppInfo],
+            cfg = mix_env_to_prod,
         ),
         "srcs": attr.label_list(
             allow_files = [".ex", ".erl", ".xrl", ".hrl", ".app.src"],
