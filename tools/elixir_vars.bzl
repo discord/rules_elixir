@@ -1,3 +1,8 @@
+load(
+    "@rules_erlang//tools:erlang_toolchain.bzl",
+    "erlang_home",
+)
+
 ELIXIR_VARS_ENV_MAP = {
     "OTP_VERSION": "$(OTP_VERSION)",
     "OTP_VERSION_FILE_PATH": "$(OTP_VERSION_FILE_PATH)",
@@ -8,10 +13,13 @@ ELIXIR_VARS_ENV_MAP = {
     "ELIXIR_VERSION_FILE_SHORT_PATH": "$(ELIXIR_VERSION_FILE_SHORT_PATH)",
 }
 
+# OTP installs are now relocatable tree artifacts rather than a tar unpacked to a
+# fixed path. OTP_INSTALL_PATH and ERLANG_RELEASE_TAR_* are gone; consumers wanting
+# to run erl should `export ERL_ROOTDIR="$PWD/$(ERLANG_RELEASE_DIR_PATH)"` (or
+# _SHORT_PATH in a runfiles context) before invoking "$(ERLANG_HOME)"/bin/erl.
 ELIXIR_VARS_ENV_MAP_INTERNAL = ELIXIR_VARS_ENV_MAP | {
-    "OTP_INSTALL_PATH": "$(OTP_INSTALL_PATH)",
-    "ERLANG_RELEASE_TAR_PATH": "$(ERLANG_RELEASE_TAR_PATH)",
-    "ERLANG_RELEASE_TAR_SHORT_PATH": "$(ERLANG_RELEASE_TAR_SHORT_PATH)",
+    "ERLANG_RELEASE_DIR_PATH": "$(ERLANG_RELEASE_DIR_PATH)",
+    "ERLANG_RELEASE_DIR_SHORT_PATH": "$(ERLANG_RELEASE_DIR_SHORT_PATH)",
 }
 
 def _impl(ctx):
@@ -21,15 +29,14 @@ def _impl(ctx):
         "OTP_VERSION": otpinfo.version,
         "OTP_VERSION_FILE_PATH": otpinfo.version_file.path,
         "OTP_VERSION_FILE_SHORT_PATH": otpinfo.version_file.short_path,
-        "ERLANG_HOME": otpinfo.erlang_home,
+        "ERLANG_HOME": erlang_home(otpinfo),
         "ELIXIR_HOME": elixirinfo.elixir_home,
         "ELIXIR_VERSION_FILE_PATH": elixirinfo.version_file.path,
         "ELIXIR_VERSION_FILE_SHORT_PATH": elixirinfo.version_file.short_path,
     }
-    if otpinfo.release_dir_tar != None:
-        vars["OTP_INSTALL_PATH"] = otpinfo.install_path
-        vars["ERLANG_RELEASE_TAR_PATH"] = otpinfo.release_dir_tar.path
-        vars["ERLANG_RELEASE_TAR_SHORT_PATH"] = otpinfo.release_dir_tar.short_path
+    if otpinfo.release_dir != None:
+        vars["ERLANG_RELEASE_DIR_PATH"] = otpinfo.release_dir.path
+        vars["ERLANG_RELEASE_DIR_SHORT_PATH"] = otpinfo.release_dir.short_path
 
     return [
         platform_common.TemplateVariableInfo(vars),

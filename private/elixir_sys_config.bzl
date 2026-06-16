@@ -24,6 +24,7 @@ extend this to also inject specs for these into `sys.config`.
 
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
+load(":elixir_toolchain.bzl", "erlang_dirs", "maybe_install_erlang")
 load(":release_info.bzl", "ReleaseInfo", "get_release_info")
 load(
     ":config_inference.bzl",
@@ -99,15 +100,16 @@ def _elixir_sys_config_impl(ctx):
     # Get the sys_config_builder tool
     builder = ctx.executable._sys_config_builder
 
-    # Get the toolchain for Erlang paths
-    toolchain = ctx.toolchains["//:toolchain_type"]
-    erlang_toolchain = toolchain.otpinfo
+    # Get the Erlang/OTP dirs (handles relocatable OTP via $ERL_ROOTDIR)
+    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
 
     # Create a wrapper script that sets up the PATH for escript
     wrapper = ctx.actions.declare_file("{}_sys_config_wrapper.sh".format(ctx.attr.name))
     if has_runtime and runtime_config_path:
         wrapper_content = """#!/bin/bash
 set -euo pipefail
+
+{erl_rootdir_setup}
 
 # Set up Erlang/OTP paths
 export PATH="{erlang_home}/bin:$PATH"
@@ -116,7 +118,8 @@ export PATH="{erlang_home}/bin:$PATH"
 RUNTIME_PATH=$(cat "{runtime_config_path_file}")
 exec "{tool_path}" "$@" --runtime-path "$RUNTIME_PATH"
 """.format(
-            erlang_home = erlang_toolchain.erlang_home,
+            erl_rootdir_setup = maybe_install_erlang(ctx),
+            erlang_home = erlang_home,
             runtime_config_path_file = runtime_config_path.path,
             tool_path = builder.path,
         )
@@ -124,13 +127,16 @@ exec "{tool_path}" "$@" --runtime-path "$RUNTIME_PATH"
         wrapper_content = """#!/bin/bash
 set -euo pipefail
 
+{erl_rootdir_setup}
+
 # Set up Erlang/OTP paths
 export PATH="{erlang_home}/bin:$PATH"
 
 # Run the escript with all arguments
 exec "{tool_path}" "$@"
 """.format(
-            erlang_home = erlang_toolchain.erlang_home,
+            erl_rootdir_setup = maybe_install_erlang(ctx),
+            erlang_home = erlang_home,
             tool_path = builder.path,
         )
 
@@ -154,7 +160,7 @@ exec "{tool_path}" "$@"
     ctx.actions.run(
         executable = wrapper,
         arguments = [args],
-        inputs = depset(inputs),
+        inputs = depset(inputs, transitive = [erlang_runfiles.files]),
         outputs = outputs,
         mnemonic = "SysConfig",
         progress_message = "Generating sys.config for {}".format(ctx.label),

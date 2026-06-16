@@ -213,13 +213,9 @@ else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
 
-if [[ "{erlang_home}" == /* ]]; then
-    ABS_ERLANG_HOME="{erlang_home}"
-else
-    ABS_ERLANG_HOME=$PWD/{erlang_home}
-fi
-
-export PATH="$ABS_ELIXIR_HOME/bin:$ABS_ERLANG_HOME/bin:$PATH"
+# erlang_home is either an absolute host path (external erlang) or the literal
+# "$ERL_ROOTDIR" (relocatable OTP), already exported above by maybe_install_erlang.
+export PATH="$ABS_ELIXIR_HOME/bin:{erlang_home}/bin:$PATH"
 
 # Create output directory
 mkdir -p "{release_dir}"

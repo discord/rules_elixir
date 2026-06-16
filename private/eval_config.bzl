@@ -6,13 +6,13 @@ from Elixir config/*.exs files and encoding them as EETF (Erlang External Term F
 
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
 load("@rules_erlang//:util.bzl", "path_join")
+load(":elixir_toolchain.bzl", "erlang_dirs", "maybe_install_erlang")
 
 def _eval_config_impl(ctx):
     """Evaluate all Elixir application configurations using the eval_config tool."""
 
-    # Get the toolchain
-    toolchain = ctx.toolchains["//:toolchain_type"]
-    erlang_toolchain = toolchain.otpinfo
+    # Get the Erlang/OTP dirs (handles relocatable OTP via $ERL_ROOTDIR)
+    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
 
     # Determine output file name
     output_name = ctx.attr.output_name
@@ -35,13 +35,16 @@ def _eval_config_impl(ctx):
     wrapper_content = """#!/bin/bash
 set -euo pipefail
 
+{erl_rootdir_setup}
+
 # Set up Erlang/OTP paths
 export PATH="{erlang_home}/bin:$PATH"
 
 # Run the escript with all arguments
 exec "{tool_path}" "$@"
 """.format(
-        erlang_home = erlang_toolchain.erlang_home,
+        erl_rootdir_setup = maybe_install_erlang(ctx),
+        erlang_home = erlang_home,
         tool_path = tool.path,
     )
 
@@ -93,9 +96,11 @@ exec "{tool_path}" "$@"
     if ctx.attr.no_debug:
         args.add("--no-debug")
 
-    # Collect inputs - config files, the tool, and any extra inputs
+    # Collect inputs - config files, the tool, any extra inputs, and the OTP
+    # release tree artifact (so $ERL_ROOTDIR/bin/erl is staged for relocatable OTP)
     inputs = depset(
         direct = ctx.files.config_files + ctx.files.extra_inputs + [tool],
+        transitive = [erlang_runfiles.files],
     )
 
     # Determine outputs

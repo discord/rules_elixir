@@ -3,6 +3,10 @@ load(
     "OtpInfo",
 )
 load(
+    "@rules_erlang//tools:erlang_toolchain.bzl",
+    "erlang_home",
+)
+load(
     ":elixir_build.bzl",
     "ElixirInfo",
 )
@@ -30,16 +34,16 @@ def _build_info(ctx):
 
 def erlang_dirs(ctx):
     info = _build_info(ctx)
-    if info.release_dir_tar != None:
+    if info.release_dir != None:
         runfiles = ctx.runfiles([
-            info.release_dir_tar,
+            info.release_dir,
             info.version_file,
         ])
     else:
         runfiles = ctx.runfiles([
             info.version_file,
         ])
-    return (info.erlang_home, info.release_dir_tar, runfiles)
+    return (erlang_home(info), info.release_dir, runfiles)
 
 def elixir_dirs(ctx, short_path = False):
     info = ctx.toolchains["//:toolchain_type"].elixirinfo
@@ -50,20 +54,29 @@ def elixir_dirs(ctx, short_path = False):
         return (p, ctx.runfiles([info.release_dir, info.version_file]))
 
 def maybe_install_erlang(ctx, short_path = False):
+    """Shell that exports ERL_ROOTDIR so a templated "$ERL_ROOTDIR"/bin/erl resolves.
+
+    Pairs with erlang_home(): that emits the "$ERL_ROOTDIR" reference (for a
+    relocatable OTP install), this gives it a value. Empty for an external/host
+    erlang, which carries an absolute erlang_home and needs no setup.
+
+    Pass short_path = True when the generated script runs from a runfiles tree
+    (an executable launched by `bazel run`/`bazel test`); leave it False (the
+    default) when the script runs inside a build action, where cwd is the
+    execroot. Mirrors erl_rootdir_setup() in
+    @rules_erlang//tools:erlang_toolchain.bzl.
+    """
     info = _build_info(ctx)
-    release_dir_tar = info.release_dir_tar
-    if release_dir_tar == None:
+    release_dir = info.release_dir
+    if release_dir == None:
         return ""
-    else:
+    if short_path:
         return """\
-mkdir -p $(dirname "{install_path}")
-if mkdir "{install_path}"; then
-    tar --extract \\
-        --no-same-owner \\
-        --directory "{install_path}" \\
-        --file {release_tar}
+if [ -n "${{TEST_SRCDIR:-}}" ]; then
+    export ERL_ROOTDIR="$TEST_SRCDIR/$TEST_WORKSPACE/{short_path}"
+else
+    export ERL_ROOTDIR="$PWD/{short_path}"
 fi\
-""".format(
-            release_tar = release_dir_tar.short_path if short_path else release_dir_tar.path,
-            install_path = info.install_path,
-        )
+""".format(short_path = release_dir.short_path)
+    else:
+        return 'export ERL_ROOTDIR="$PWD/{}"'.format(release_dir.path)

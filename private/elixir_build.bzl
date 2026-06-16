@@ -10,6 +10,10 @@ load(
     "@rules_erlang//private:erlang_build.bzl",
     "OtpInfo",
 )
+load(
+    "@rules_erlang//tools:erlang_toolchain.bzl",
+    "erlang_home",
+)
 
 ElixirInfo = provider(
     doc = "A Home directory of a built Elixir",
@@ -21,24 +25,20 @@ ElixirInfo = provider(
 )
 
 def otp_install_snippet(otp_info):
-    """Generate shell snippet to extract OTP release tar, like maybe_install_erlang."""
-    if otp_info.release_dir_tar == None:
+    """Shell snippet exporting ERL_ROOTDIR for a relocatable OTP, like maybe_install_erlang.
+
+    Empty for an external/host erlang (erlang_home is an absolute path). Build-action
+    context only -- all callers here are run_shell build actions, so the release dir is
+    addressed by its (execroot-relative) path.
+    """
+    if otp_info.release_dir == None:
         return ""
-    return """\
-mkdir -p $(dirname "{install_path}")
-if mkdir "{install_path}"; then
-    tar --extract --no-same-owner \\
-        --directory "{install_path}" \\
-        --file {release_tar}
-fi""".format(
-        release_tar = otp_info.release_dir_tar.path,
-        install_path = otp_info.install_path,
-    )
+    return 'export ERL_ROOTDIR="$PWD/{}"'.format(otp_info.release_dir.path)
 
 def otp_runfiles(ctx, otp_info):
     """Build runfiles depset for OTP, like erlang_dirs."""
-    if otp_info.release_dir_tar != None:
-        return ctx.runfiles([otp_info.release_dir_tar, otp_info.version_file])
+    if otp_info.release_dir != None:
+        return ctx.runfiles([otp_info.release_dir, otp_info.version_file])
     else:
         return ctx.runfiles([otp_info.version_file])
 
@@ -86,7 +86,7 @@ cp -r bin $ABS_RELEASE_DIR/
 cp -r lib $ABS_RELEASE_DIR/
 """.format(
             maybe_install_erlang = otp_install_snippet(otp_info),
-            erlang_home = otp_info.erlang_home,
+            erlang_home = erlang_home(otp_info),
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
             first_source_file = ctx.files.srcs[0].path if ctx.files.srcs else "",
@@ -111,7 +111,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
             maybe_install_erlang = otp_install_snippet(otp_info),
-            erlang_home = otp_info.erlang_home,
+            erlang_home = erlang_home(otp_info),
             elixir_home = release_dir.path,
             version_file = version_file.path,
         ),
@@ -164,7 +164,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
             maybe_install_erlang = otp_install_snippet(otp_info),
-            erlang_home = otp_info.erlang_home,
+            erlang_home = erlang_home(otp_info),
             elixir_home = elixir_home,
             version_file = version_file.path,
         ),

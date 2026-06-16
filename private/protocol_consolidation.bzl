@@ -6,6 +6,7 @@ at build time rather than runtime. This matches Mix's behavior during releases.
 
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
+load(":elixir_toolchain.bzl", "erlang_dirs", "maybe_install_erlang")
 
 def _elixir_protocol_consolidation_impl(ctx):
     """Consolidate protocols from Elixir applications."""
@@ -34,9 +35,8 @@ def _elixir_protocol_consolidation_impl(ctx):
     # Get the protocol_consolidator tool
     consolidator = ctx.executable._protocol_consolidator
 
-    # Get the toolchain for Erlang paths
-    toolchain = ctx.toolchains["//:toolchain_type"]
-    erlang_toolchain = toolchain.otpinfo
+    # Get the Erlang/OTP dirs (handles relocatable OTP via $ERL_ROOTDIR)
+    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
 
     # Create a wrapper script that sets up the PATH for escript
     wrapper = ctx.actions.declare_file("{}_consolidator_wrapper.sh".format(ctx.attr.name))
@@ -45,13 +45,16 @@ def _elixir_protocol_consolidation_impl(ctx):
     wrapper_content = """#!/bin/bash
 set -euo pipefail
 
+{erl_rootdir_setup}
+
 # Set up Erlang/OTP paths
 export PATH="{erlang_home}/bin:$PATH"
 
 # Run the protocol consolidator escript
 exec "{tool_path}" "$@"
 """.format(
-        erlang_home = erlang_toolchain.erlang_home,
+        erl_rootdir_setup = maybe_install_erlang(ctx),
+        erlang_home = erlang_home,
         tool_path = consolidator.path,
     )
 
@@ -73,7 +76,7 @@ exec "{tool_path}" "$@"
     ctx.actions.run(
         executable = wrapper,
         arguments = [args],
-        inputs = depset(beam_files + [consolidator]),
+        inputs = depset(beam_files + [consolidator], transitive = [erlang_runfiles.files]),
         outputs = [output_dir],
         mnemonic = "ConsolidateProtocols",
         progress_message = "Consolidating protocols for {}".format(ctx.label),
