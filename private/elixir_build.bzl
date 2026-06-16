@@ -180,3 +180,98 @@ elixir_external = rule(
         ),
     },
 )
+
+def _archive_root(files):
+    """Longest common directory prefix of all paths -- the extracted archive root.
+
+    Stripping it makes a prebuilt Elixir's bin/ and lib/ land at the release_dir
+    root. Robust regardless of glob ordering (unlike using the first file's dir).
+    """
+    segs = files[0].path.split("/")
+    for f in files[1:]:
+        other = f.path.split("/")
+        n = 0
+        for i in range(min(len(segs), len(other))):
+            if segs[i] != other[i]:
+                break
+            n += 1
+        segs = segs[:n]
+    return "/".join(segs)
+
+def _elixir_prebuilt_impl(ctx):
+    otp_info = ctx.attr.otp[OtpInfo]
+    release_dir = ctx.actions.declare_directory("elixir_release")
+    version_file = ctx.actions.declare_file("elixir_version")
+
+    runfiles = otp_runfiles(ctx, otp_info)
+
+    # Stage the prebuilt Elixir release (bin/ + lib/) into a relocatable tree
+    # artifact -- like elixir_build, but extract instead of `make`.
+    ctx.actions.run_shell(
+        inputs = ctx.files.srcs,
+        outputs = [release_dir],
+        command = """set -euo pipefail
+
+ABS_RELEASE_DIR=$PWD/{release_path}
+for src in {source_files}; do
+  rel="${{src#{archive_root}/}}"
+  dest="$ABS_RELEASE_DIR/$rel"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+done
+""".format(
+            release_path = release_dir.path,
+            source_files = " ".join([f.path for f in ctx.files.srcs]),
+            archive_root = _archive_root(ctx.files.srcs) if ctx.files.srcs else ".",
+        ),
+        mnemonic = "ELIXIRPREBUILT",
+        progress_message = "Staging prebuilt Elixir",
+    )
+
+    ctx.actions.run_shell(
+        inputs = depset(
+            direct = [release_dir],
+            transitive = [runfiles.files],
+        ),
+        outputs = [version_file],
+        command = """set -euo pipefail
+
+{erl_rootdir_setup}
+
+export PATH="{erlang_home}"/bin:${{PATH}}
+
+"{elixir_home}"/bin/iex --version > {version_file}
+""".format(
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
+            erlang_home = erlang_home(otp_info),
+            elixir_home = release_dir.path,
+            version_file = version_file.path,
+        ),
+        mnemonic = "ELIXIRVERSION",
+        progress_message = "Validating prebuilt elixir",
+    )
+
+    return [
+        DefaultInfo(files = depset([release_dir, version_file])),
+        otp_info,
+        ElixirInfo(
+            release_dir = release_dir,
+            elixir_home = None,
+            version_file = version_file,
+        ),
+    ]
+
+elixir_prebuilt = rule(
+    implementation = _elixir_prebuilt_impl,
+    attrs = {
+        "srcs": attr.label_list(
+            allow_files = True,
+            doc = "Extracted prebuilt Elixir release tree (bin/, lib/).",
+        ),
+        "otp": attr.label(
+            mandatory = True,
+            providers = [OtpInfo],
+            doc = "An OTP target providing the installation to validate against.",
+        ),
+    },
+)

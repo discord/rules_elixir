@@ -10,6 +10,7 @@ load(
     "//private:elixir_build.bzl",
     _elixir_build = "elixir_build",
     _elixir_external = "elixir_external",
+    _elixir_prebuilt = "elixir_prebuilt",
 )
 load("//private:elixir_release.bzl", _elixir_release = "elixir_release")
 load("//private:elixir_release_bundle.bzl", _elixir_release_bundle = "elixir_release_bundle")
@@ -134,6 +135,9 @@ def ex_unit_test(**kwargs):
 # Targets for building and utilising elixir toolchains
 def elixir_external(**kwargs):
     return _elixir_external(**kwargs)
+
+def elixir_prebuilt(**kwargs):
+    return _elixir_prebuilt(**kwargs)
 
 def elixir_toolchain(**kwargs):
     return _elixir_toolchain(**kwargs)
