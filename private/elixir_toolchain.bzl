@@ -36,6 +36,15 @@ def _build_info(ctx):
 
 def erlang_dirs(ctx):
     info = _build_info(ctx)
+
+    # erl.exe resolves its root from erl.ini, not $ERL_ROOTDIR, so a relocatable
+    # (release_dir) toolchain can't work on a Windows target -- fail loudly rather
+    # than emit a broken script. Use an external (host) erlang on Windows.
+    if getattr(ctx.attr, "is_windows", False) and info.release_dir != None:
+        fail("relocatable OTP toolchain (release_dir) is unsupported on Windows " +
+             "targets: erl.exe reads its root from erl.ini, not $ERL_ROOTDIR. " +
+             "Use an external (host) erlang toolchain for Windows.")
+
     return (erlang_home(info), info.release_dir, otp_runfiles(ctx, info))
 
 def elixir_dirs(ctx, short_path = False):
