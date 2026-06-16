@@ -24,7 +24,7 @@ extend this to also inject specs for these into `sys.config`.
 
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
-load(":elixir_toolchain.bzl", "erlang_dirs", "maybe_install_erlang")
+load(":elixir_toolchain.bzl", "erlang_dirs", "erl_rootdir_setup")
 load(":release_info.bzl", "ReleaseInfo", "get_release_info")
 load(
     ":config_inference.bzl",
@@ -118,7 +118,7 @@ export PATH="{erlang_home}/bin:$PATH"
 RUNTIME_PATH=$(cat "{runtime_config_path_file}")
 exec "{tool_path}" "$@" --runtime-path "$RUNTIME_PATH"
 """.format(
-            erl_rootdir_setup = maybe_install_erlang(ctx),
+            erl_rootdir_setup = erl_rootdir_setup(ctx),
             erlang_home = erlang_home,
             runtime_config_path_file = runtime_config_path.path,
             tool_path = builder.path,
@@ -135,7 +135,7 @@ export PATH="{erlang_home}/bin:$PATH"
 # Run the escript with all arguments
 exec "{tool_path}" "$@"
 """.format(
-            erl_rootdir_setup = maybe_install_erlang(ctx),
+            erl_rootdir_setup = erl_rootdir_setup(ctx),
             erlang_home = erlang_home,
             tool_path = builder.path,
         )

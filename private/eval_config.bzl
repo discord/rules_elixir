@@ -6,7 +6,7 @@ from Elixir config/*.exs files and encoding them as EETF (Erlang External Term F
 
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
 load("@rules_erlang//:util.bzl", "path_join")
-load(":elixir_toolchain.bzl", "erlang_dirs", "maybe_install_erlang")
+load(":elixir_toolchain.bzl", "erlang_dirs", "erl_rootdir_setup")
 
 def _eval_config_impl(ctx):
     """Evaluate all Elixir application configurations using the eval_config tool."""
@@ -43,7 +43,7 @@ export PATH="{erlang_home}/bin:$PATH"
 # Run the escript with all arguments
 exec "{tool_path}" "$@"
 """.format(
-        erl_rootdir_setup = maybe_install_erlang(ctx),
+        erl_rootdir_setup = erl_rootdir_setup(ctx),
         erlang_home = erlang_home,
         tool_path = tool.path,
     )

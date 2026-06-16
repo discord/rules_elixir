@@ -53,7 +53,7 @@ def elixir_dirs(ctx, short_path = False):
         p = info.release_dir.short_path if short_path else info.release_dir.path
         return (p, ctx.runfiles([info.release_dir, info.version_file]))
 
-def maybe_install_erlang(ctx, short_path = False):
+def erl_rootdir_setup(ctx, short_path = False):
     """Shell that exports ERL_ROOTDIR so a templated "$ERL_ROOTDIR"/bin/erl resolves.
 
     Pairs with erlang_home(): that emits the "$ERL_ROOTDIR" reference (for a

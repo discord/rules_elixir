@@ -6,7 +6,7 @@ at build time rather than runtime. This matches Mix's behavior during releases.
 
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
-load(":elixir_toolchain.bzl", "erlang_dirs", "maybe_install_erlang")
+load(":elixir_toolchain.bzl", "erlang_dirs", "erl_rootdir_setup")
 
 def _elixir_protocol_consolidation_impl(ctx):
     """Consolidate protocols from Elixir applications."""
@@ -53,7 +53,7 @@ export PATH="{erlang_home}/bin:$PATH"
 # Run the protocol consolidator escript
 exec "{tool_path}" "$@"
 """.format(
-        erl_rootdir_setup = maybe_install_erlang(ctx),
+        erl_rootdir_setup = erl_rootdir_setup(ctx),
         erlang_home = erlang_home,
         tool_path = consolidator.path,
     )
