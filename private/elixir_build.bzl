@@ -13,6 +13,8 @@ load(
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_home",
+    "otp_rootdir_setup",
+    "otp_runfiles",
 )
 
 ElixirInfo = provider(
@@ -23,24 +25,6 @@ ElixirInfo = provider(
         "version_file",
     ],
 )
-
-def otp_install_snippet(otp_info):
-    """Shell snippet exporting ERL_ROOTDIR for a relocatable OTP, like erl_rootdir_setup.
-
-    Empty for an external/host erlang (erlang_home is an absolute path). Build-action
-    context only -- all callers here are run_shell build actions, so the release dir is
-    addressed by its (execroot-relative) path.
-    """
-    if otp_info.release_dir == None:
-        return ""
-    return 'export ERL_ROOTDIR="$PWD/{}"'.format(otp_info.release_dir.path)
-
-def otp_runfiles(ctx, otp_info):
-    """Build runfiles depset for OTP, like erlang_dirs."""
-    if otp_info.release_dir != None:
-        return ctx.runfiles([otp_info.release_dir, otp_info.version_file])
-    else:
-        return ctx.runfiles([otp_info.version_file])
 
 def _elixir_build_impl(ctx):
     otp_info = ctx.attr.otp[OtpInfo]
@@ -85,7 +69,7 @@ make
 cp -r bin $ABS_RELEASE_DIR/
 cp -r lib $ABS_RELEASE_DIR/
 """.format(
-            erl_rootdir_setup = otp_install_snippet(otp_info),
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
             erlang_home = erlang_home(otp_info),
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
@@ -110,7 +94,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            erl_rootdir_setup = otp_install_snippet(otp_info),
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
             erlang_home = erlang_home(otp_info),
             elixir_home = release_dir.path,
             version_file = version_file.path,
@@ -163,7 +147,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            erl_rootdir_setup = otp_install_snippet(otp_info),
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
             erlang_home = erlang_home(otp_info),
             elixir_home = elixir_home,
             version_file = version_file.path,

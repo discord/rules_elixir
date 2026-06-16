@@ -5,12 +5,12 @@ load(
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_home",
+    "otp_rootdir_setup",
+    "otp_runfiles",
 )
 load(
     ":elixir_build.bzl",
     "ElixirInfo",
-    "otp_install_snippet",
-    "otp_runfiles",
 )
 
 def _elixir_source_build_impl(ctx):
@@ -56,7 +56,7 @@ make
 cp -r bin $ABS_RELEASE_DIR/
 cp -r lib $ABS_RELEASE_DIR/
 """.format(
-            erl_rootdir_setup = otp_install_snippet(otp_info),
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
             erlang_home = erlang_home(otp_info),
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
@@ -81,7 +81,7 @@ export PATH="{erlang_home}"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            erl_rootdir_setup = otp_install_snippet(otp_info),
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
             erlang_home = erlang_home(otp_info),
             elixir_home = release_dir.path,
             version_file = version_file.path,

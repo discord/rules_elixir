@@ -5,6 +5,8 @@ load(
 load(
     "@rules_erlang//tools:erlang_toolchain.bzl",
     "erlang_home",
+    "otp_rootdir_setup",
+    "otp_runfiles",
 )
 load(
     ":elixir_build.bzl",
@@ -34,16 +36,7 @@ def _build_info(ctx):
 
 def erlang_dirs(ctx):
     info = _build_info(ctx)
-    if info.release_dir != None:
-        runfiles = ctx.runfiles([
-            info.release_dir,
-            info.version_file,
-        ])
-    else:
-        runfiles = ctx.runfiles([
-            info.version_file,
-        ])
-    return (erlang_home(info), info.release_dir, runfiles)
+    return (erlang_home(info), info.release_dir, otp_runfiles(ctx, info))
 
 def elixir_dirs(ctx, short_path = False):
     info = ctx.toolchains["//:toolchain_type"].elixirinfo
@@ -54,29 +47,7 @@ def elixir_dirs(ctx, short_path = False):
         return (p, ctx.runfiles([info.release_dir, info.version_file]))
 
 def erl_rootdir_setup(ctx, short_path = False):
-    """Shell that exports ERL_ROOTDIR so a templated "$ERL_ROOTDIR"/bin/erl resolves.
-
-    Pairs with erlang_home(): that emits the "$ERL_ROOTDIR" reference (for a
-    relocatable OTP install), this gives it a value. Empty for an external/host
-    erlang, which carries an absolute erlang_home and needs no setup.
-
-    Pass short_path = True when the generated script runs from a runfiles tree
-    (an executable launched by `bazel run`/`bazel test`); leave it False (the
-    default) when the script runs inside a build action, where cwd is the
-    execroot. Mirrors erl_rootdir_setup() in
-    @rules_erlang//tools:erlang_toolchain.bzl.
-    """
-    info = _build_info(ctx)
-    release_dir = info.release_dir
-    if release_dir == None:
-        return ""
-    if short_path:
-        return """\
-if [ -n "${{TEST_SRCDIR:-}}" ]; then
-    export ERL_ROOTDIR="$TEST_SRCDIR/$TEST_WORKSPACE/{short_path}"
-else
-    export ERL_ROOTDIR="$PWD/{short_path}"
-fi\
-""".format(short_path = release_dir.short_path)
-    else:
-        return 'export ERL_ROOTDIR="$PWD/{}"'.format(release_dir.path)
+    """ERL_ROOTDIR export for the elixir toolchain's OTP; delegates to the pure
+    otp_rootdir_setup in @rules_erlang//tools:erlang_toolchain.bzl. short_path=True
+    for a runfiles (bazel run/test) context, False for a build action."""
+    return otp_rootdir_setup(_build_info(ctx), short_path)
