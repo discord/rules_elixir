@@ -213,15 +213,11 @@ def _elixir_prebuilt_impl(ctx):
         command = """set -euo pipefail
 
 ABS_RELEASE_DIR=$PWD/{release_path}
-for src in {source_files}; do
-  rel="${{src#{archive_root}/}}"
-  dest="$ABS_RELEASE_DIR/$rel"
-  mkdir -p "$(dirname "$dest")"
-  cp "$src" "$dest"
-done
+# cp -rp, not a tar -h pipe (cf. erlang_release_archive): compiled Elixir has no
+# symlinks that need resolving. archive_root holds bin/ + lib/; /. copies contents.
+cp -rp "{archive_root}/." "$ABS_RELEASE_DIR/"
 """.format(
             release_path = release_dir.path,
-            source_files = " ".join([f.path for f in ctx.files.srcs]),
             archive_root = _archive_root(ctx.files.srcs) if ctx.files.srcs else ".",
         ),
         mnemonic = "ELIXIRPREBUILT",
