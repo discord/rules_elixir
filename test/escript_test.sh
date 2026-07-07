@@ -12,7 +12,19 @@ if [[ -n "${ERLANG_RELEASE_DIR_SHORT_PATH:-}" ]]; then
     fi
 fi
 
-PATH="$ELIXIR_HOME/bin:$ERLANG_HOME/bin:$PATH"
+# Relocatable Elixir: ELIXIR_HOME is "", so resolve it from the staged tree
+# (same short_path anchoring as ERL_ROOTDIR above).
+if [[ -n "${ELIXIR_RELEASE_DIR_SHORT_PATH:-}" ]]; then
+    if [[ -n "${TEST_SRCDIR:-}" ]]; then
+        ELIXIR_HOME="$TEST_SRCDIR/$TEST_WORKSPACE/$ELIXIR_RELEASE_DIR_SHORT_PATH"
+    else
+        ELIXIR_HOME="$PWD/$ELIXIR_RELEASE_DIR_SHORT_PATH"
+    fi
+fi
+
+# ERLANG_HOME is the literal "$ERL_ROOTDIR" for relocatable OTP (doesn't
+# re-expand in a plain ref), so prefer the already-exported ERL_ROOTDIR.
+PATH="$ELIXIR_HOME/bin:${ERL_ROOTDIR:-$ERLANG_HOME}/bin:$PATH"
 
 ./basic hello there | tee out.log
 
