@@ -62,7 +62,7 @@ def _elixir_config(ctx):
                 sha256 = elixir.sha256,
                 strip_prefix = elixir.strip_prefix,
                 build_file_content = """
-load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
+load("@rules_elixir//private:elixir_build.bzl", "elixir_build", "elixir_prebuilt_tarball")
 
 elixir_build(
     name = "elixir_build",
@@ -70,9 +70,19 @@ elixir_build(
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
     visibility = ["//visibility:public"],
 )
+
+# Package the built runtime as a hostable tarball -- bazel build
+# @elixir_source_{name}//:elixir_tarball -- for use with
+# internal_elixir_from_prebuilt elsewhere, avoiding recompilation.
+elixir_prebuilt_tarball(
+    name = "elixir_tarball",
+    elixir = ":elixir_build",
+    visibility = ["//visibility:public"],
+)
 """.format(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
+                    name = elixir.name,
                 ),
             )
 
@@ -101,7 +111,7 @@ elixir_build(
                 sha256 = elixir.sha256,
                 strip_prefix = strip_prefix,
                 build_file_content = """
-load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
+load("@rules_elixir//private:elixir_build.bzl", "elixir_build", "elixir_prebuilt_tarball")
 
 elixir_build(
     name = "elixir_build",
@@ -109,9 +119,19 @@ elixir_build(
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
     visibility = ["//visibility:public"],
 )
+
+# Package the built runtime as a hostable tarball -- bazel build
+# @elixir_source_{name}//:elixir_tarball -- for use with
+# internal_elixir_from_prebuilt elsewhere, avoiding recompilation.
+elixir_prebuilt_tarball(
+    name = "elixir_tarball",
+    elixir = ":elixir_build",
+    visibility = ["//visibility:public"],
+)
 """.format(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
+                    name = elixir.name,
                 ),
             )
 

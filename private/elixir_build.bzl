@@ -275,3 +275,44 @@ elixir_prebuilt = rule(
         ),
     },
 )
+
+def _elixir_prebuilt_tarball_impl(ctx):
+    info = ctx.attr.elixir[ElixirInfo]
+    if info.release_dir == None:
+        fail("elixir_prebuilt_tarball requires a relocatable Elixir (release_dir set); " +
+             "external installs (elixir_home) cannot be packaged.")
+
+    tarball = ctx.actions.declare_file(ctx.label.name + ".tar.gz")
+
+    ctx.actions.run_shell(
+        inputs = [info.release_dir],
+        outputs = [tarball],
+        command = """set -euo pipefail
+
+# -h dereferences symlinks so the archive has none (RBE-robust, matches
+# rules_erlang's erlang_build). -C <dir> . puts bin/ + lib/ at the tar root,
+# which is what internal_elixir_from_prebuilt / elixir_prebuilt expect.
+tar -czhf "$PWD/{out}" -C "{release_dir}" .
+""".format(
+            out = tarball.path,
+            release_dir = info.release_dir.path,
+        ),
+        use_default_shell_env = True,
+        mnemonic = "ELIXIRTARBALL",
+        progress_message = "Packaging prebuilt Elixir tarball",
+    )
+
+    return [DefaultInfo(files = depset([tarball]))]
+
+elixir_prebuilt_tarball = rule(
+    implementation = _elixir_prebuilt_tarball_impl,
+    attrs = {
+        "elixir": attr.label(
+            mandatory = True,
+            providers = [ElixirInfo],
+            doc = "A target providing ElixirInfo (e.g. an elixir_build/elixir_prebuilt " +
+                  "target such as @elixir_source_<name>//:elixir_build). Its release_dir " +
+                  "(bin/ + lib/) is packaged into a .tar.gz for internal_elixir_from_prebuilt.",
+        ),
+    },
+)

@@ -11,6 +11,7 @@ load(
     _elixir_build = "elixir_build",
     _elixir_external = "elixir_external",
     _elixir_prebuilt = "elixir_prebuilt",
+    _elixir_prebuilt_tarball = "elixir_prebuilt_tarball",
 )
 load("//private:elixir_release.bzl", _elixir_release = "elixir_release")
 load("//private:elixir_release_bundle.bzl", _elixir_release_bundle = "elixir_release_bundle")
@@ -138,6 +139,15 @@ def elixir_external(**kwargs):
 
 def elixir_prebuilt(**kwargs):
     return _elixir_prebuilt(**kwargs)
+
+def elixir_prebuilt_tarball(**kwargs):
+    """Packages a built Elixir runtime (bin/ + lib/) into a hostable .tar.gz.
+
+    Consume the result with elixir_config's internal_elixir_from_prebuilt tag,
+    which fetches it via http_archive and stages it through elixir_prebuilt --
+    closing the produce/consume loop for pre-built Elixir runtimes.
+    """
+    return _elixir_prebuilt_tarball(**kwargs)
 
 def elixir_toolchain(**kwargs):
     return _elixir_toolchain(**kwargs)
