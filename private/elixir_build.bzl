@@ -187,7 +187,11 @@ def _archive_root(files):
     Stripping it makes a prebuilt Elixir's bin/ and lib/ land at the release_dir
     root. Robust regardless of glob ordering (unlike using the first file's dir).
     """
-    segs = files[0].path.split("/")
+    # NOTE: Get the dirname of the first file to calculate the lowest common
+    # path prefix between all files. Chopping off the last element ensures we
+    # don't return the file itself, if we only have one file.
+    # We always provide `files.srcs` here, so we should never be called with a directory.
+    segs = files[0].path.split("/")[:-1]
     for f in files[1:]:
         other = f.path.split("/")
         n = 0
