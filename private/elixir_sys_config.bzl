@@ -24,8 +24,6 @@ extend this to also inject specs for these into `sys.config`.
 
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
-load(":elixir_toolchain.bzl", "erlang_dirs", "erl_rootdir_setup")
-load(":release_info.bzl", "ReleaseInfo", "get_release_info")
 load(
     ":config_inference.bzl",
     "infer_app_name",
@@ -35,6 +33,8 @@ load(
     "parse_config_provider_options",
     "should_use_runtime_config",
 )
+load(":elixir_toolchain.bzl", "erlang_escript_wrapper")
+load(":release_info.bzl", "ReleaseInfo", "get_release_info")
 
 def _elixir_sys_config_impl(ctx):
     """Generate a sys.config file with intelligent defaults and inference."""
@@ -100,50 +100,21 @@ def _elixir_sys_config_impl(ctx):
     # Get the sys_config_builder tool
     builder = ctx.executable._sys_config_builder
 
-    # Get the Erlang/OTP dirs (handles relocatable OTP via $ERL_ROOTDIR)
-    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
-
-    # Create a wrapper script that sets up the PATH for escript
-    wrapper = ctx.actions.declare_file("{}_sys_config_wrapper.sh".format(ctx.attr.name))
+    # Runtime-config builds read the runtime path from a file and forward it.
+    exec_line = None
     if has_runtime and runtime_config_path:
-        wrapper_content = """#!/bin/bash
-set -euo pipefail
-
-{erl_rootdir_setup}
-
-# Set up Erlang/OTP paths
-export PATH="{erlang_home}/bin:$PATH"
-
-# Read runtime config path from file and pass to tool
-RUNTIME_PATH=$(cat "{runtime_config_path_file}")
-exec "{tool_path}" "$@" --runtime-path "$RUNTIME_PATH"
-""".format(
-            erl_rootdir_setup = erl_rootdir_setup(ctx),
-            erlang_home = erlang_home,
-            runtime_config_path_file = runtime_config_path.path,
-            tool_path = builder.path,
-        )
-    else:
-        wrapper_content = """#!/bin/bash
-set -euo pipefail
-
-{erl_rootdir_setup}
-
-# Set up Erlang/OTP paths
-export PATH="{erlang_home}/bin:$PATH"
-
-# Run the escript with all arguments
-exec "{tool_path}" "$@"
-""".format(
-            erl_rootdir_setup = erl_rootdir_setup(ctx),
-            erlang_home = erlang_home,
-            tool_path = builder.path,
+        exec_line = 'RUNTIME_PATH=$(cat "{}")\nexec "{}" "$@" --runtime-path "$RUNTIME_PATH"'.format(
+            runtime_config_path.path,
+            builder.path,
         )
 
-    ctx.actions.write(
-        output = wrapper,
-        content = wrapper_content,
-        is_executable = True,
+    # Wrapper puts the toolchain's Erlang/OTP on PATH; erlang_runfiles must be
+    # staged as action inputs (below) so $ERL_ROOTDIR/bin/erl exists.
+    (wrapper, erlang_runfiles) = erlang_escript_wrapper(
+        ctx,
+        "{}_sys_config_wrapper.sh".format(ctx.attr.name),
+        builder,
+        exec_line = exec_line,
     )
 
     # Prepare inputs
@@ -200,7 +171,6 @@ elixir_sys_config = rule(
                 app_configs = [":config_prod"]  # From eval_config
             """,
         ),
-
         "runtime_configs": attr.label_list(
             allow_files = [".exs"],
             default = [],
@@ -234,7 +204,6 @@ elixir_sys_config = rule(
             proper config files with eval_config instead.
             """,
         ),
-
         "config_provider_options": attr.string_dict(
             default = {},
             doc = """Advanced Config.Provider options.
@@ -285,7 +254,6 @@ elixir_sys_config = rule(
                 env = "staging"  # Custom environment
             """,
         ),
-
         "version": attr.string(
             doc = """Explicitly set the release version.
 

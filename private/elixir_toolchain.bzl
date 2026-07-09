@@ -60,3 +60,43 @@ def erl_rootdir_setup(ctx, short_path = False):
     otp_rootdir_setup in @rules_erlang//tools:erlang_toolchain.bzl. short_path=True
     for a runfiles (bazel run/test) context, False for a build action."""
     return otp_rootdir_setup(_build_info(ctx), short_path)
+
+def erlang_escript_wrapper(ctx, wrapper_name, tool, exec_line = None):
+    """Write a bash wrapper that puts the toolchain's Erlang/OTP on PATH and execs an escript.
+
+    Handles relocatable OTP via $ERL_ROOTDIR, so the same wrapper works for
+    external and internal toolchains.
+
+    Args:
+      ctx: the rule context.
+      wrapper_name: filename to declare for the generated wrapper script.
+      tool: the escript File to exec (its path is used in the default exec line).
+      exec_line: overrides the default `exec "<tool>" "$@"` (e.g. to append flags).
+
+    Returns:
+      (wrapper_file, erlang_runfiles). Callers must feed erlang_runfiles.files
+      into the action's inputs so the OTP release tree is staged.
+    """
+    (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
+    if exec_line == None:
+        exec_line = 'exec "{}" "$@"'.format(tool.path)
+    wrapper = ctx.actions.declare_file(wrapper_name)
+    ctx.actions.write(
+        output = wrapper,
+        content = """#!/bin/bash
+set -euo pipefail
+
+{erl_rootdir_setup}
+
+# Set up Erlang/OTP paths
+export PATH="{erlang_home}/bin:$PATH"
+
+{exec_line}
+""".format(
+            erl_rootdir_setup = erl_rootdir_setup(ctx),
+            erlang_home = erlang_home,
+            exec_line = exec_line,
+        ),
+        is_executable = True,
+    )
+    return (wrapper, erlang_runfiles)
