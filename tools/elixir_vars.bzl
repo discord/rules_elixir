@@ -13,10 +13,8 @@ ELIXIR_VARS_ENV_MAP = {
     "ELIXIR_VERSION_FILE_SHORT_PATH": "$(ELIXIR_VERSION_FILE_SHORT_PATH)",
 }
 
-# OTP installs are now relocatable tree artifacts rather than a tar unpacked to a
-# fixed path. OTP_INSTALL_PATH and ERLANG_RELEASE_TAR_* are gone; consumers wanting
-# to run erl should `export ERL_ROOTDIR="$PWD/$(ERLANG_RELEASE_DIR_PATH)"` (or
-# _SHORT_PATH in a runfiles context) before invoking "$(ERLANG_HOME)"/bin/erl.
+# Consumers wanting to run erl should `export ERL_ROOTDIR="$PWD/$(ERLANG_RELEASE_DIR_PATH)"`
+# (or _SHORT_PATH in a runfiles context) before invoking "$(ERLANG_HOME)"/bin/erl.
 ELIXIR_VARS_ENV_MAP_INTERNAL = ELIXIR_VARS_ENV_MAP | {
     "ERLANG_RELEASE_DIR_PATH": "$(ERLANG_RELEASE_DIR_PATH)",
     "ERLANG_RELEASE_DIR_SHORT_PATH": "$(ERLANG_RELEASE_DIR_SHORT_PATH)",
