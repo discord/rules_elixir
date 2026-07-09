@@ -26,6 +26,32 @@ ElixirInfo = provider(
     ],
 )
 
+def elixir_version_action(ctx, otp_info, elixir_home, version_file, inputs, mnemonic = "ELIXIRVERSION", progress_message = "Validating elixir"):
+    """Run `iex --version` to validate an Elixir install and capture its version.
+
+    Shared by elixir_build / elixir_external / elixir_prebuilt / elixir_source_build:
+    the command is identical; callers vary only in inputs, elixir_home, and labels.
+    """
+    ctx.actions.run_shell(
+        inputs = inputs,
+        outputs = [version_file],
+        command = """set -euo pipefail
+
+{erl_rootdir_setup}
+
+export PATH="{erlang_home}"/bin:${{PATH}}
+
+"{elixir_home}"/bin/iex --version > {version_file}
+""".format(
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
+            erlang_home = erlang_home(otp_info),
+            elixir_home = elixir_home,
+            version_file = version_file.path,
+        ),
+        mnemonic = mnemonic,
+        progress_message = progress_message,
+    )
+
 def _elixir_build_impl(ctx):
     otp_info = ctx.attr.otp[OtpInfo]
     release_dir = ctx.actions.declare_directory("elixir_release")
@@ -80,27 +106,12 @@ cp -r lib $ABS_RELEASE_DIR/
         progress_message = "Building Elixir from source",
     )
 
-    ctx.actions.run_shell(
-        inputs = depset(
-            direct = [release_dir],
-            transitive = [runfiles.files],
-        ),
-        outputs = [version_file],
-        command = """set -euo pipefail
-
-{erl_rootdir_setup}
-
-export PATH="{erlang_home}"/bin:${{PATH}}
-
-"{elixir_home}"/bin/iex --version > {version_file}
-""".format(
-            erl_rootdir_setup = otp_rootdir_setup(otp_info),
-            erlang_home = erlang_home(otp_info),
-            elixir_home = release_dir.path,
-            version_file = version_file.path,
-        ),
-        mnemonic = "ELIXIRVERSION",
-        progress_message = "Validating elixir",
+    elixir_version_action(
+        ctx,
+        otp_info,
+        release_dir.path,
+        version_file,
+        depset(direct = [release_dir], transitive = [runfiles.files]),
     )
 
     return [
@@ -136,22 +147,12 @@ def _elixir_external_impl(ctx):
 
     runfiles = otp_runfiles(ctx, otp_info)
 
-    ctx.actions.run_shell(
-        inputs = runfiles.files,
-        outputs = [version_file],
-        command = """set -euo pipefail
-
-{erl_rootdir_setup}
-
-export PATH="{erlang_home}"/bin:${{PATH}}
-
-"{elixir_home}"/bin/iex --version > {version_file}
-""".format(
-            erl_rootdir_setup = otp_rootdir_setup(otp_info),
-            erlang_home = erlang_home(otp_info),
-            elixir_home = elixir_home,
-            version_file = version_file.path,
-        ),
+    elixir_version_action(
+        ctx,
+        otp_info,
+        elixir_home,
+        version_file,
+        runfiles.files,
         mnemonic = "ELIXIR",
         progress_message = "Validating elixir at {}".format(elixir_home),
     )
@@ -187,6 +188,7 @@ def _archive_root(files):
     Stripping it makes a prebuilt Elixir's bin/ and lib/ land at the release_dir
     root. Robust regardless of glob ordering (unlike using the first file's dir).
     """
+
     # NOTE: Get the dirname of the first file to calculate the lowest common
     # path prefix between all files. Chopping off the last element ensures we
     # don't return the file itself, if we only have one file.
@@ -228,26 +230,12 @@ cp -rp "{archive_root}/." "$ABS_RELEASE_DIR/"
         progress_message = "Staging prebuilt Elixir",
     )
 
-    ctx.actions.run_shell(
-        inputs = depset(
-            direct = [release_dir],
-            transitive = [runfiles.files],
-        ),
-        outputs = [version_file],
-        command = """set -euo pipefail
-
-{erl_rootdir_setup}
-
-export PATH="{erlang_home}"/bin:${{PATH}}
-
-"{elixir_home}"/bin/iex --version > {version_file}
-""".format(
-            erl_rootdir_setup = otp_rootdir_setup(otp_info),
-            erlang_home = erlang_home(otp_info),
-            elixir_home = release_dir.path,
-            version_file = version_file.path,
-        ),
-        mnemonic = "ELIXIRVERSION",
+    elixir_version_action(
+        ctx,
+        otp_info,
+        release_dir.path,
+        version_file,
+        depset(direct = [release_dir], transitive = [runfiles.files]),
         progress_message = "Validating prebuilt elixir",
     )
 
