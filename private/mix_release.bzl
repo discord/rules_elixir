@@ -8,7 +8,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erl_rootdir_setup",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
 load(":release_info.bzl", "ReleaseInfo", "create_release_info")
@@ -76,7 +76,7 @@ def _mix_release_impl(ctx):
     version_file = ctx.actions.declare_file("{}_version.txt".format(ctx.label.name))
     script = """set -euo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
@@ -135,7 +135,7 @@ cd -
 mv $OUTPUT_DIR/{mix_env}/rel/{app_name} {output_file}
 awk '{{print $2}}' {output_file}/{app_name}/releases/start_erl.data | tr -d '\\n' > {version_file}
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        erl_rootdir_setup = erl_rootdir_setup(ctx),
         elixir_home = elixir_home,
         erlang_home = erlang_home,
         erl_libs_path = erl_libs_path,

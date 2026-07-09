@@ -16,7 +16,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erl_rootdir_setup",
 )
 
 def _package_relative_path(ctx, p):
@@ -62,7 +62,7 @@ def _impl(ctx):
 #!/usr/bin/env bash
 set -eo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
@@ -91,7 +91,7 @@ tail -n 4 test.log | grep -E --silent "0 failure"
 tail -n 4 test.log | grep -E --silent "[0-9] test"
 rm test.log
 """.format(
-            maybe_install_erlang = maybe_install_erlang(ctx, short_path = True),
+            erl_rootdir_setup = erl_rootdir_setup(ctx, short_path = True),
             erlang_home = erlang_home,
             elixir_home = elixir_home,
             copy_srcs_and_data_commands = "\n".join(copy_srcs_and_data_commands),

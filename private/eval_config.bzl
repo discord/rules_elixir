@@ -4,15 +4,12 @@ This module provides a Bazel rule for evaluating ALL application configurations
 from Elixir config/*.exs files and encoding them as EETF (Erlang External Term Format).
 """
 
-load("//:elixir_app_info.bzl", "ElixirAppInfo")
 load("@rules_erlang//:util.bzl", "path_join")
+load("//:elixir_app_info.bzl", "ElixirAppInfo")
+load(":elixir_toolchain.bzl", "erlang_escript_wrapper")
 
 def _eval_config_impl(ctx):
     """Evaluate all Elixir application configurations using the eval_config tool."""
-
-    # Get the toolchain
-    toolchain = ctx.toolchains["//:toolchain_type"]
-    erlang_toolchain = toolchain.otpinfo
 
     # Determine output file name
     output_name = ctx.attr.output_name
@@ -28,27 +25,12 @@ def _eval_config_impl(ctx):
     # Get the eval_config tool
     tool = ctx.executable._eval_config
 
-    # Create a wrapper script that sets up the PATH for escript
-    wrapper = ctx.actions.declare_file("{}_wrapper.sh".format(ctx.attr.name))
-
-    # Build the wrapper script content
-    wrapper_content = """#!/bin/bash
-set -euo pipefail
-
-# Set up Erlang/OTP paths
-export PATH="{erlang_home}/bin:$PATH"
-
-# Run the escript with all arguments
-exec "{tool_path}" "$@"
-""".format(
-        erlang_home = erlang_toolchain.erlang_home,
-        tool_path = tool.path,
-    )
-
-    ctx.actions.write(
-        output = wrapper,
-        content = wrapper_content,
-        is_executable = True,
+    # Wrapper puts the toolchain's Erlang/OTP on PATH; erlang_runfiles must be
+    # staged as action inputs (below) so $ERL_ROOTDIR/bin/erl exists.
+    (wrapper, erlang_runfiles) = erlang_escript_wrapper(
+        ctx,
+        "{}_wrapper.sh".format(ctx.attr.name),
+        tool,
     )
 
     # Build arguments for eval_config tool
@@ -93,9 +75,11 @@ exec "{tool_path}" "$@"
     if ctx.attr.no_debug:
         args.add("--no-debug")
 
-    # Collect inputs - config files, the tool, and any extra inputs
+    # Collect inputs - config files, the tool, any extra inputs, and the OTP
+    # release tree artifact (so $ERL_ROOTDIR/bin/erl is staged for relocatable OTP)
     inputs = depset(
         direct = ctx.files.config_files + ctx.files.extra_inputs + [tool],
+        transitive = [erlang_runfiles.files],
     )
 
     # Determine outputs

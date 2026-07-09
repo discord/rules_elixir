@@ -6,6 +6,7 @@ at build time rather than runtime. This matches Mix's behavior during releases.
 
 load("@rules_erlang//:erlang_app_info.bzl", "ErlangAppInfo")
 load("//:elixir_app_info.bzl", "ElixirAppInfo")
+load(":elixir_toolchain.bzl", "erlang_escript_wrapper")
 
 def _elixir_protocol_consolidation_impl(ctx):
     """Consolidate protocols from Elixir applications."""
@@ -17,8 +18,10 @@ def _elixir_protocol_consolidation_impl(ctx):
     for dep in ctx.attr.deps:
         if ErlangAppInfo in dep:
             app_info = dep[ErlangAppInfo]
+
             # Collect all beam files
             beam_files.extend(app_info.beam)
+
             # Extract ebin directories from beam file paths
             for beam_file in app_info.beam:
                 ebin_dir = beam_file.dirname
@@ -34,31 +37,12 @@ def _elixir_protocol_consolidation_impl(ctx):
     # Get the protocol_consolidator tool
     consolidator = ctx.executable._protocol_consolidator
 
-    # Get the toolchain for Erlang paths
-    toolchain = ctx.toolchains["//:toolchain_type"]
-    erlang_toolchain = toolchain.otpinfo
-
-    # Create a wrapper script that sets up the PATH for escript
-    wrapper = ctx.actions.declare_file("{}_consolidator_wrapper.sh".format(ctx.attr.name))
-
-    # Build the wrapper script content
-    wrapper_content = """#!/bin/bash
-set -euo pipefail
-
-# Set up Erlang/OTP paths
-export PATH="{erlang_home}/bin:$PATH"
-
-# Run the protocol consolidator escript
-exec "{tool_path}" "$@"
-""".format(
-        erlang_home = erlang_toolchain.erlang_home,
-        tool_path = consolidator.path,
-    )
-
-    ctx.actions.write(
-        output = wrapper,
-        content = wrapper_content,
-        is_executable = True,
+    # Wrapper puts the toolchain's Erlang/OTP on PATH; erlang_runfiles must be
+    # staged as action inputs (below) so $ERL_ROOTDIR/bin/erl exists.
+    (wrapper, erlang_runfiles) = erlang_escript_wrapper(
+        ctx,
+        "{}_consolidator_wrapper.sh".format(ctx.attr.name),
+        consolidator,
     )
 
     # Build arguments for consolidator
@@ -73,7 +57,7 @@ exec "{tool_path}" "$@"
     ctx.actions.run(
         executable = wrapper,
         arguments = [args],
-        inputs = depset(beam_files + [consolidator]),
+        inputs = depset(beam_files + [consolidator], transitive = [erlang_runfiles.files]),
         outputs = [output_dir],
         mnemonic = "ConsolidateProtocols",
         progress_message = "Consolidating protocols for {}".format(ctx.label),

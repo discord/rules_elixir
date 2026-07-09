@@ -6,7 +6,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erl_rootdir_setup",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
 load("//private:beam_transitions.bzl", "platform_independent_transition")
@@ -104,7 +104,7 @@ def _mix_compile_impl(ctx):
     # that's just a way for elixir to expose and interface to erlang.
     script = """set -euo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
@@ -170,7 +170,7 @@ mkdir -p "$ABS_OUT_DIR"
 cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}/ebin/*.app "$ABS_OUT_DIR/"
 
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        erl_rootdir_setup = erl_rootdir_setup(ctx),
         app_name = ctx.attr.app_name,
         # app_file_out = app_file.path,
         erlang_home = erlang_home,

@@ -91,7 +91,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erl_rootdir_setup",
 )
 
 def _impl(ctx):
@@ -299,7 +299,7 @@ chmod +x "$BUNDLE_DIR/bin/$RELEASE_NAME"
     # Build the complete bundle creation script
     script = """set -euo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 
 BUNDLE_DIR="{bundle_dir}"
 MANIFEST_FILE="{manifest_file}"
@@ -353,7 +353,7 @@ echo "  $BUNDLE_DIR/bin/$RELEASE_NAME start    # Start as daemon"
 echo "  $BUNDLE_DIR/bin/$RELEASE_NAME console  # Start with console"
 echo "  $BUNDLE_DIR/bin/$RELEASE_NAME foreground  # Start in foreground"
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        erl_rootdir_setup = erl_rootdir_setup(ctx),
         bundle_dir = bundle_dir.path,
         manifest_file = erlang_release_info.manifest_file.path,
         release_name = release_name,

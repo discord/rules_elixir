@@ -5,7 +5,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erl_rootdir_setup",
 )
 load("//private:mix_info.bzl", "MixProjectInfo")
 
@@ -65,7 +65,7 @@ def _mix_test_impl(ctx):
 #!/usr/bin/env bash
 set -eo pipefail
 
-{install_erlang}
+{erl_rootdir_setup}
 if [[ "{elixir_home}" == /* ]]; then
     ABS_ELIXIR_HOME="{elixir_home}"
 else
@@ -111,7 +111,7 @@ MIX_ENV=test \\
     ERL_LIBS="$DEPS_DIR" \\
     ${{ABS_ELIXIR_HOME}}/bin/mix test --no-compile {no_start}--no-deps-check {test_paths} {mix_test_opts}
 """.format(
-        install_erlang = maybe_install_erlang(ctx, short_path = True),
+        erl_rootdir_setup = erl_rootdir_setup(ctx, short_path = True),
         erlang_home = erlang_home,
         elixir_home = elixir_home,
         package = package,

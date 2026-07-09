@@ -94,7 +94,7 @@ load(
     "//private:elixir_toolchain.bzl",
     "elixir_dirs",
     "erlang_dirs",
-    "maybe_install_erlang",
+    "erl_rootdir_setup",
 )
 
 def _elixir_release_impl(ctx):
@@ -204,7 +204,7 @@ cp "{manifest_file}" "{release_dir}/{release_name}.manifest"
     script_content = """#!/bin/bash
 set -euo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 
 # Set up paths
 if [[ "{elixir_home}" == /* ]]; then
@@ -213,13 +213,9 @@ else
     ABS_ELIXIR_HOME=$PWD/{elixir_home}
 fi
 
-if [[ "{erlang_home}" == /* ]]; then
-    ABS_ERLANG_HOME="{erlang_home}"
-else
-    ABS_ERLANG_HOME=$PWD/{erlang_home}
-fi
-
-export PATH="$ABS_ELIXIR_HOME/bin:$ABS_ERLANG_HOME/bin:$PATH"
+# erlang_home is either an absolute host path (external erlang) or the literal
+# "$ERL_ROOTDIR" (relocatable OTP), already exported above by erl_rootdir_setup.
+export PATH="$ABS_ELIXIR_HOME/bin:{erlang_home}/bin:$PATH"
 
 # Create output directory
 mkdir -p "{release_dir}"
@@ -250,7 +246,7 @@ ARGS+=("--version" "{release_version}")
 chmod -w "{release_dir}/{release_name}.script"
 chmod -w "{release_dir}/{release_name}.boot"
 """.format(
-        maybe_install_erlang = maybe_install_erlang(ctx),
+        erl_rootdir_setup = erl_rootdir_setup(ctx),
         elixir_home = elixir_home,
         erlang_home = erlang_home,
         processor = processor.path,

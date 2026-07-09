@@ -3,10 +3,14 @@ load(
     "OtpInfo",
 )
 load(
+    "@rules_erlang//tools:erlang_toolchain.bzl",
+    "erlang_home",
+    "otp_rootdir_setup",
+    "otp_runfiles",
+)
+load(
     ":elixir_build.bzl",
     "ElixirInfo",
-    "otp_install_snippet",
-    "otp_runfiles",
 )
 
 def _elixir_source_build_impl(ctx):
@@ -24,7 +28,7 @@ def _elixir_source_build_impl(ctx):
         outputs = [release_dir],
         command = """set -euo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 
 export PATH="{erlang_home}"/bin:${{PATH}}
 
@@ -52,8 +56,8 @@ make
 cp -r bin $ABS_RELEASE_DIR/
 cp -r lib $ABS_RELEASE_DIR/
 """.format(
-            maybe_install_erlang = otp_install_snippet(otp_info),
-            erlang_home = otp_info.erlang_home,
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
+            erlang_home = erlang_home(otp_info),
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
             first_source_file = ctx.files.srcs[0].path if ctx.files.srcs else "",
@@ -71,14 +75,14 @@ cp -r lib $ABS_RELEASE_DIR/
         outputs = [version_file],
         command = """set -euo pipefail
 
-{maybe_install_erlang}
+{erl_rootdir_setup}
 
 export PATH="{erlang_home}"/bin:${{PATH}}
 
 "{elixir_home}"/bin/iex --version > {version_file}
 """.format(
-            maybe_install_erlang = otp_install_snippet(otp_info),
-            erlang_home = otp_info.erlang_home,
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
+            erlang_home = erlang_home(otp_info),
             elixir_home = release_dir.path,
             version_file = version_file.path,
         ),

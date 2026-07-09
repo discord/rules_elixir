@@ -1,13 +1,14 @@
 #! /usr/bin/env bash
 set -exo pipefail
 
-if [[ -n "$ERLANG_RELEASE_TAR_SHORT_PATH" ]]; then
-    mkdir -p $(dirname "$OTP_INSTALL_PATH")
-    if mkdir "$OTP_INSTALL_PATH"; then
-        tar --extract \
-            --no-same-owner \
-            --directory "$OTP_INSTALL_PATH" \
-            --file "$ERLANG_RELEASE_TAR_SHORT_PATH"
+# Relocatable OTP: point ERL_ROOTDIR at the staged release tree artifact so the
+# "$ERLANG_HOME" (= "$ERL_ROOTDIR") below resolves. Runfiles/sh_test context, so
+# anchor on $TEST_SRCDIR/$TEST_WORKSPACE (or $PWD) using the short_path var.
+if [[ -n "${ERLANG_RELEASE_DIR_SHORT_PATH:-}" ]]; then
+    if [[ -n "${TEST_SRCDIR:-}" ]]; then
+        export ERL_ROOTDIR="$TEST_SRCDIR/$TEST_WORKSPACE/$ERLANG_RELEASE_DIR_SHORT_PATH"
+    else
+        export ERL_ROOTDIR="$PWD/$ERLANG_RELEASE_DIR_SHORT_PATH"
     fi
 fi
 
