@@ -72,10 +72,11 @@ elixir_build(
 )
 
 # Package the built runtime as a hostable tarball -- bazel build
-# @elixir_source_{name}//:elixir_tarball -- for use with
-# internal_elixir_from_prebuilt elsewhere, avoiding recompilation.
+# @elixir_source_{name}//:elixir-{name}-otp{otp}
+# for use with internal_elixir_from_prebuilt elsewhere, avoiding
+# recompilation. The target
 elixir_prebuilt_tarball(
-    name = "elixir_tarball",
+    name = "elixir-{name}-otp{otp}",
     elixir = ":elixir_build",
     visibility = ["//visibility:public"],
 )
@@ -121,10 +122,12 @@ elixir_build(
 )
 
 # Package the built runtime as a hostable tarball -- bazel build
-# @elixir_source_{name}//:elixir_tarball -- for use with
-# internal_elixir_from_prebuilt elsewhere, avoiding recompilation.
+# @elixir_source_{name}//:elixir-{name}-otp{otp} -- for use with
+# internal_elixir_from_prebuilt elsewhere, avoiding recompilation. The target
+# name (and thus the tarball filename) encodes the Elixir + OTP install
+# identifiers, cf. rules_erlang's otp-<name>_build.
 elixir_prebuilt_tarball(
-    name = "elixir_tarball",
+    name = "elixir-{name}-otp{otp}",
     elixir = ":elixir_build",
     visibility = ["//visibility:public"],
 )
