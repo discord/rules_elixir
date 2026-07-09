@@ -237,10 +237,15 @@ internal_elixir_from_prebuilt = tag_class(attrs = {
     "name": attr.string(),
     "version": attr.string(),
     "url": attr.string(
-        doc = "URL of a precompiled Elixir release archive (bin/ + lib/ at its root).",
+        doc = "URL of a precompiled Elixir release archive.",
     ),
     "strip_prefix": attr.string(),
     "sha256": attr.string(),
+    # NOTE: we currently depend on both of these so that we can populate our
+    # templated BUILD file correctly, and don't have access to OtpInfo here
+    # (unless we accept a label, and give up lazy loading).
+    # TODO(denbeigh): i believe i can remove this with a more coherent
+    # toolchain aliasing strategy in rules_erlang
     "otp": attr.string(
         mandatory = True,
         doc = "Name of an erlang_config installation to validate the prebuilt Elixir against.",
