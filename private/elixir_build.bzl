@@ -270,6 +270,10 @@ def _elixir_prebuilt_tarball_impl(ctx):
         fail("elixir_prebuilt_tarball requires a relocatable Elixir (release_dir set); " +
              "external installs (elixir_home) cannot be packaged.")
 
+    # Output name is derived from the target name (cf. rules_erlang's
+    # erlang_build). The elixir_config extension names the target after the
+    # Elixir + OTP install identifiers, so hosted runtimes are distinguishable
+    # (e.g. elixir-1_16-otp26_2.tar.gz).
     tarball = ctx.actions.declare_file(ctx.label.name + ".tar.gz")
 
     ctx.actions.run_shell(
