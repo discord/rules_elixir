@@ -62,7 +62,7 @@ def _elixir_config(ctx):
                 sha256 = elixir.sha256,
                 strip_prefix = elixir.strip_prefix,
                 build_file_content = """
-load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
+load("@rules_elixir//private:elixir_build.bzl", "elixir_build", "elixir_prebuilt_tarball")
 
 elixir_build(
     name = "elixir_build",
@@ -70,9 +70,19 @@ elixir_build(
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
     visibility = ["//visibility:public"],
 )
+
+# Package the built runtime as a hostable tarball -- bazel build
+# @elixir_source_{name}//:elixir_tarball -- for use with
+# internal_elixir_from_prebuilt elsewhere, avoiding recompilation.
+elixir_prebuilt_tarball(
+    name = "elixir_tarball",
+    elixir = ":elixir_build",
+    visibility = ["//visibility:public"],
+)
 """.format(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
+                    name = elixir.name,
                 ),
             )
 
@@ -101,9 +111,53 @@ elixir_build(
                 sha256 = elixir.sha256,
                 strip_prefix = strip_prefix,
                 build_file_content = """
-load("@rules_elixir//private:elixir_build.bzl", "elixir_build")
+load("@rules_elixir//private:elixir_build.bzl", "elixir_build", "elixir_prebuilt_tarball")
 
 elixir_build(
+    name = "elixir_build",
+    srcs = glob(["**/*"]),
+    otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
+    visibility = ["//visibility:public"],
+)
+
+# Package the built runtime as a hostable tarball -- bazel build
+# @elixir_source_{name}//:elixir_tarball -- for use with
+# internal_elixir_from_prebuilt elsewhere, avoiding recompilation.
+elixir_prebuilt_tarball(
+    name = "elixir_tarball",
+    elixir = ":elixir_build",
+    visibility = ["//visibility:public"],
+)
+""".format(
+                    erlang_config_repo = erlang_config_repo,
+                    otp = elixir.otp,
+                    name = elixir.name,
+                ),
+            )
+
+        for elixir in mod.tags.internal_elixir_from_prebuilt:
+            types[elixir.name] = INSTALLATION_TYPE_INTERNAL
+            versions[elixir.name] = elixir.version
+            urls[elixir.name] = elixir.url
+            strip_prefixs[elixir.name] = elixir.strip_prefix
+            sha256s[elixir.name] = elixir.sha256
+            target_compatible_withs[elixir.name] = [str(l) for l in elixir.target_compatible_with]
+            exec_compatible_withs[elixir.name] = [str(l) for l in elixir.exec_compatible_with]
+            if elixir.erlang_version:
+                erlang_versions[elixir.name] = elixir.erlang_version
+
+            # Fetch a *precompiled* Elixir release and stage it (no source build)
+            # via elixir_prebuilt. The target stays named "elixir_build" so the
+            # generated internal toolchain BUILD (BUILD_internal.tpl) resolves.
+            http_archive(
+                name = "elixir_source_{}".format(elixir.name),
+                url = elixir.url,
+                sha256 = elixir.sha256,
+                strip_prefix = elixir.strip_prefix,
+                build_file_content = """
+load("@rules_elixir//private:elixir_build.bzl", "elixir_prebuilt")
+
+elixir_prebuilt(
     name = "elixir_build",
     srcs = glob(["**/*"]),
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
@@ -179,12 +233,38 @@ internal_elixir_from_github_release = tag_class(attrs = {
     "target_compatible_with": attr.label_list(default = []),
 })
 
+internal_elixir_from_prebuilt = tag_class(attrs = {
+    "name": attr.string(),
+    "version": attr.string(),
+    "url": attr.string(
+        doc = "URL of a precompiled Elixir release archive.",
+    ),
+    "strip_prefix": attr.string(),
+    "sha256": attr.string(),
+    # NOTE: we currently depend on both of these so that we can populate our
+    # templated BUILD file correctly, and don't have access to OtpInfo here
+    # (unless we accept a label, and give up lazy loading).
+    # TODO(denbeigh): i believe i can remove this with a more coherent
+    # toolchain aliasing strategy in rules_erlang
+    "otp": attr.string(
+        mandatory = True,
+        doc = "Name of an erlang_config installation to validate the prebuilt Elixir against.",
+    ),
+    "erlang_version": attr.string(
+        doc = "OTP version string (e.g. '26.3') for combined platform constraints. " +
+              "Must match the version of the OTP installation named by the 'otp' attr.",
+    ),
+    "exec_compatible_with": attr.label_list(default = []),
+    "target_compatible_with": attr.label_list(default = []),
+})
+
 elixir_config = module_extension(
     implementation = _elixir_config,
     tag_classes = {
         "external_elixir_from_path": external_elixir_from_path,
         "internal_elixir_from_http_archive": internal_elixir_from_http_archive,
         "internal_elixir_from_github_release": internal_elixir_from_github_release,
+        "internal_elixir_from_prebuilt": internal_elixir_from_prebuilt,
     },
 )
 

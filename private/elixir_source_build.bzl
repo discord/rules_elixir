@@ -11,6 +11,7 @@ load(
 load(
     ":elixir_build.bzl",
     "ElixirInfo",
+    "elixir_version_action",
 )
 
 def _elixir_source_build_impl(ctx):
@@ -67,27 +68,12 @@ cp -r lib $ABS_RELEASE_DIR/
         progress_message = "Building Elixir from source",
     )
 
-    ctx.actions.run_shell(
-        inputs = depset(
-            direct = [release_dir],
-            transitive = [runfiles.files],
-        ),
-        outputs = [version_file],
-        command = """set -euo pipefail
-
-{erl_rootdir_setup}
-
-export PATH="{erlang_home}"/bin:${{PATH}}
-
-"{elixir_home}"/bin/iex --version > {version_file}
-""".format(
-            erl_rootdir_setup = otp_rootdir_setup(otp_info),
-            erlang_home = erlang_home(otp_info),
-            elixir_home = release_dir.path,
-            version_file = version_file.path,
-        ),
-        mnemonic = "ELIXIRVERSION",
-        progress_message = "Validating elixir",
+    elixir_version_action(
+        ctx,
+        otp_info,
+        release_dir.path,
+        version_file,
+        depset(direct = [release_dir], transitive = [runfiles.files]),
     )
 
     return [
