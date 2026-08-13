@@ -19,6 +19,7 @@ def _impl(ctx):
     ctx.actions.run_shell(
         inputs = elixir_runfiles.files,
         outputs = [ebin],
+        mnemonic = "ElixirAppFileCompile",
         command = """set -euo pipefail
 
 cp -r "{elixir_home}"/lib/{app}/ebin/* {ebin}
