@@ -9,6 +9,7 @@ def _impl(ctx):
     ctx.actions.run_shell(
         inputs = ctx.files.beam_files_dir + ctx.files.app_file,
         outputs = [out],
+        mnemonic = "ElixirEbinDir",
         command = """set -euo pipefail
 
 cp -r "{beam_files_dir}"/* "{out}"

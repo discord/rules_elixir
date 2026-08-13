@@ -44,6 +44,7 @@ ${{ABS_ELIXIR_HOME}}/bin/iex --eval "$1"
     ctx.actions.run_shell(
         inputs = inputs,
         outputs = outs,
+        mnemonic = "ElixirIexEval",
         command = script,
         arguments = [ctx.attr.expression],
     )

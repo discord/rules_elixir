@@ -13,6 +13,7 @@ def _impl(ctx):
     ctx.actions.run_shell(
         inputs = lib_info.beam + ctx.files.without,
         outputs = [new_beam_files],
+        mnemonic = "ElixirErlangAppFilterModuleConflicts",
         command = """set -euo pipefail
 
 cp "{beam_files_dir}"/* "{new_beam_files_dir}"
