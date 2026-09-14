@@ -16,41 +16,13 @@ load(
     "otp_rootdir_setup",
     "otp_runfiles",
 )
-
-ElixirInfo = provider(
-    doc = "A Home directory of a built Elixir",
-    fields = [
-        "release_dir",
-        "elixir_home",
-        "version_file",
-    ],
+load(
+    ":hermetic_tar.bzl",
+    "TAR_TOOLCHAIN_TYPE",
+    "archive_cmds",
+    "bsdtar_setup",
+    "mtree_cmds",
 )
-
-def elixir_version_action(ctx, otp_info, elixir_home, version_file, inputs, mnemonic = "ELIXIRVERSION", progress_message = "Validating elixir"):
-    """Run `iex --version` to validate an Elixir install and capture its version.
-
-    Shared by elixir_build / elixir_external / elixir_prebuilt / elixir_source_build:
-    the command is identical; callers vary only in inputs, elixir_home, and labels.
-    """
-    ctx.actions.run_shell(
-        inputs = inputs,
-        outputs = [version_file],
-        command = """set -euo pipefail
-
-{erl_rootdir_setup}
-
-export PATH="{erlang_home}"/bin:${{PATH}}
-
-"{elixir_home}"/bin/iex --version > {version_file}
-""".format(
-            erl_rootdir_setup = otp_rootdir_setup(otp_info),
-            erlang_home = erlang_home(otp_info),
-            elixir_home = elixir_home,
-            version_file = version_file.path,
-        ),
-        mnemonic = mnemonic,
-        progress_message = progress_message,
-    )
 
 def _elixir_build_impl(ctx):
     otp_info = ctx.attr.otp[OtpInfo]
@@ -276,19 +248,42 @@ def _elixir_prebuilt_tarball_impl(ctx):
     # (e.g. elixir-1_16-otp26_2.tar.gz).
     tarball = ctx.actions.declare_file(ctx.label.name + ".tar.gz")
 
+    tar_toolchain = ctx.toolchains[TAR_TOOLCHAIN_TYPE]
+    bsdtar = tar_toolchain.tarinfo.binary
+
     ctx.actions.run_shell(
         inputs = [info.release_dir],
         outputs = [tarball],
         command = """set -euo pipefail
 
+ABS_OUT="$PWD/{out}"
+
+{bsdtar_setup}
+
+# The manifest goes to a scratch file, not into the release directory: pass 2
+# archives everything the release directory holds at that moment.
+MTREE="$(mktemp)"
+trap 'rm -f "$MTREE"' EXIT
+
 # -h dereferences symlinks so the archive has none (RBE-robust, matches
-# rules_erlang's erlang_build). -C <dir> . puts bin/ + lib/ at the tar root,
-# which is what internal_elixir_from_prebuilt / elixir_prebuilt expect.
-tar -czhf "$PWD/{out}" -C "{release_dir}" .
+# rules_erlang's erlang_build). cd <dir> then `.` puts bin/ + lib/ at the tar
+# root, which is what internal_elixir_from_prebuilt / elixir_prebuilt expect.
+# The old command was a bare `tar -czhf`, which wrote the wall clock, the
+# builder's uid and the output filename into the archive, so the same Elixir
+# never gave the same sha256 twice. gzip -n keeps the last of those three out
+# of the gzip header; private/hermetic_tar.bzl handles the rest.
+cd "{release_dir}"
+{mtree_cmds}
+{archive_cmds} | gzip -n > "$ABS_OUT"
 """.format(
             out = tarball.path,
             release_dir = info.release_dir.path,
+            bsdtar_setup = bsdtar_setup(tar_toolchain, bsdtar.path),
+            mtree_cmds = mtree_cmds("-h .", "$MTREE"),
+            archive_cmds = archive_cmds("$MTREE"),
         ),
+        tools = tar_toolchain.default.files,
+        toolchain = TAR_TOOLCHAIN_TYPE,
         use_default_shell_env = True,
         mnemonic = "ELIXIRTARBALL",
         progress_message = "Packaging prebuilt Elixir tarball",
@@ -307,4 +302,5 @@ elixir_prebuilt_tarball = rule(
                   "(bin/ + lib/) is packaged into a .tar.gz for internal_elixir_from_prebuilt.",
         ),
     },
+    toolchains = [TAR_TOOLCHAIN_TYPE],
 )

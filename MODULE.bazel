@@ -7,6 +7,16 @@ bazel_dep(
     name = "bazel_skylib",
     version = "1.7.1",
 )
+
+# The tarball rule archives through this module's bsdtar rather than through
+# whatever `tar` the action PATH happens to hold, because a Mac holds bsdtar
+# 3.7.4 there and that build rejects the GNU flags. Keep the version at
+# 0.10.5: the monorepo already selects 0.10.5, so a higher request here moves
+# its lock for no gain.
+bazel_dep(
+    name = "tar.bzl",
+    version = "0.10.5",
+)
 bazel_dep(
     name = "rules_erlang",
     version = "3.16.0",
