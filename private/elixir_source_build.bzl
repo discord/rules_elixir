@@ -11,6 +11,7 @@ load(
 load(
     ":elixir_build.bzl",
     "ElixirInfo",
+    "build_root_setup",
     "elixir_version_action",
 )
 
@@ -33,11 +34,15 @@ def _elixir_source_build_impl(ctx):
 
 export PATH="{erlang_home}"/bin:${{PATH}}
 
-ABS_BUILD_DIR="$(mktemp -d)"
 ABS_RELEASE_DIR=$PWD/{release_path}
 
+# See elixir_build.bzl: the release tree's modes reach the tarball, and a cp
+# takes its modes from the action's umask.
+umask 022
+
+{build_root_setup}
+
 # Copy source files preserving directory structure, using first file to determine prefix
-mkdir -p $ABS_BUILD_DIR
 REPO_PREFIX=$(dirname "{first_source_file}")
 for src in {source_files}; do
   # Strip the repository prefix to get relative path from repository root
@@ -62,6 +67,7 @@ cp -r lib $ABS_RELEASE_DIR/
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
             first_source_file = ctx.files.srcs[0].path if ctx.files.srcs else "",
+            build_root_setup = build_root_setup(ctx, otp_info),
         ),
         use_default_shell_env = True,
         mnemonic = "ELIXIRBUILD",
@@ -94,6 +100,11 @@ elixir_source_build = rule(
             mandatory = True,
             providers = [OtpInfo],
             doc = "An erlang_build target to use for compiling Elixir.",
+        ),
+        "version": attr.string(
+            doc = "The Elixir version these sources hold. It keys the fixed " +
+                  "build directory, so two versions can build at the same " +
+                  "time. Only that; nothing validates it.",
         ),
     },
 )

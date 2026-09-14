@@ -68,6 +68,7 @@ elixir_build(
     name = "elixir_build",
     srcs = glob(["**/*"]),
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
+    version = "{version}",
     visibility = ["//visibility:public"],
 )
 
@@ -84,6 +85,7 @@ elixir_prebuilt_tarball(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
                     name = elixir.name,
+                    version = elixir.version,
                 ),
             )
 
@@ -118,6 +120,7 @@ elixir_build(
     name = "elixir_build",
     srcs = glob(["**/*"]),
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
+    version = "{version}",
     visibility = ["//visibility:public"],
 )
 
@@ -135,6 +138,7 @@ elixir_prebuilt_tarball(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
                     name = elixir.name,
+                    version = elixir.version,
                 ),
             )
 

@@ -24,6 +24,93 @@ load(
     "mtree_cmds",
 )
 
+# The build directory path ends up inside Elixir's own outputs -- elixirc
+# records the source path in the compile info of every .beam it writes -- so
+# it has to be a constant. A `mktemp -d` here made the tarball differ between
+# two builds of the same target. rules_erlang solved this first; this keeps
+# its shape and uses this module's own name, so that a cleanup of
+# /tmp/rules_elixir_build never touches an OTP build.
+_BUILD_ROOT_PREFIX = "/tmp/rules_elixir_build"
+
+# The fixed path is the price of reproducibility (see _BUILD_ROOT_PREFIX).
+# Two builds of this target at once on an unsandboxed machine would share it,
+# so the lock turns that into a loud error instead of two makes in one tree.
+# The rm is the other half: we always start empty, so a run that died
+# mid-build can never be silently resumed. Bazel never cleans /tmp, so we
+# remove the tree on the way out too.
+_BUILD_ROOT_SETUP = """\
+BUILD_ROOT="{build_root}"
+BUILD_LOCK="$BUILD_ROOT.lock"
+mkdir -p "{build_root_prefix}"
+if ! mkdir "$BUILD_LOCK" 2>/dev/null; then
+    echo "ERROR: $BUILD_ROOT is already in use by another build."
+    echo "       If no other build is running, remove $BUILD_LOCK and retry."
+    exit 1
+fi
+trap 'rm -rf "$BUILD_ROOT" "$BUILD_LOCK"' EXIT
+rm -rf "$BUILD_ROOT"
+ABS_BUILD_DIR="$BUILD_ROOT"
+mkdir -p "$ABS_BUILD_DIR"\
+"""
+
+def build_root_setup(ctx, otp_info):
+    """Shell that takes the lock on this build's fixed build directory.
+
+    Args:
+        ctx: the rule context. Its label name and `version` attribute key the
+            directory, so that two Elixir builds do not collide.
+        otp_info: the OtpInfo of the OTP this build runs against. Its version
+            keys the directory too, because the same Elixir source built
+            against two OTP versions is two builds.
+
+    Returns:
+        Shell commands that set ABS_BUILD_DIR, ready to interpolate.
+    """
+    key = "-".join([
+        ctx.label.name,
+        ctx.attr.version or "unversioned",
+        "otp" + (otp_info.version or "unknown"),
+    ]).replace("/", "_")
+    return _BUILD_ROOT_SETUP.format(
+        build_root = _BUILD_ROOT_PREFIX + "/" + key,
+        build_root_prefix = _BUILD_ROOT_PREFIX,
+    )
+
+ElixirInfo = provider(
+    doc = "A Home directory of a built Elixir",
+    fields = [
+        "release_dir",
+        "elixir_home",
+        "version_file",
+    ],
+)
+
+def elixir_version_action(ctx, otp_info, elixir_home, version_file, inputs, mnemonic = "ELIXIRVERSION", progress_message = "Validating elixir"):
+    """Run `iex --version` to validate an Elixir install and capture its version.
+
+    Shared by elixir_build / elixir_external / elixir_prebuilt / elixir_source_build:
+    the command is identical; callers vary only in inputs, elixir_home, and labels.
+    """
+    ctx.actions.run_shell(
+        inputs = inputs,
+        outputs = [version_file],
+        command = """set -euo pipefail
+
+{erl_rootdir_setup}
+
+export PATH="{erlang_home}"/bin:${{PATH}}
+
+"{elixir_home}"/bin/iex --version > {version_file}
+""".format(
+            erl_rootdir_setup = otp_rootdir_setup(otp_info),
+            erlang_home = erlang_home(otp_info),
+            elixir_home = elixir_home,
+            version_file = version_file.path,
+        ),
+        mnemonic = mnemonic,
+        progress_message = progress_message,
+    )
+
 def _elixir_build_impl(ctx):
     otp_info = ctx.attr.otp[OtpInfo]
     release_dir = ctx.actions.declare_directory("elixir_release")
@@ -43,11 +130,17 @@ def _elixir_build_impl(ctx):
 
 export PATH="{erlang_home}"/bin:${{PATH}}
 
-ABS_BUILD_DIR="$(mktemp -d)"
 ABS_RELEASE_DIR=$PWD/{release_path}
 
+# elixir_prebuilt_tarball records the mode of every file it packages, and the
+# cp below takes its modes from the action's umask. Bazel does not set one,
+# so without this line a worker on anything but 022 produces a different
+# tarball for the same Elixir.
+umask 022
+
+{build_root_setup}
+
 # Copy source files preserving directory structure, using first file to determine prefix
-mkdir -p $ABS_BUILD_DIR
 REPO_PREFIX=$(dirname "{first_source_file}")
 for src in {source_files}; do
   # Strip the repository prefix to get relative path from repository root
@@ -72,6 +165,7 @@ cp -r lib $ABS_RELEASE_DIR/
             release_path = release_dir.path,
             source_files = " ".join([f.path for f in ctx.files.srcs]),
             first_source_file = ctx.files.srcs[0].path if ctx.files.srcs else "",
+            build_root_setup = build_root_setup(ctx, otp_info),
         ),
         use_default_shell_env = True,
         mnemonic = "ELIXIRBUILD",
@@ -104,6 +198,11 @@ elixir_build = rule(
             mandatory = True,
             providers = [OtpInfo],
             doc = "An erlang_build target to use for compiling Elixir.",
+        ),
+        "version": attr.string(
+            doc = "The Elixir version these sources hold. It keys the fixed " +
+                  "build directory, so two versions can build at the same " +
+                  "time. Only that; nothing validates it.",
         ),
     },
 )
