@@ -1,0 +1,7 @@
+load(":tar_repro.bzl", "tar_repro_test")
+
+exports_files(["tar_repro_test.sh.tpl"])
+
+tar_repro_test(
+    name = "tar_repro_test",
+)
