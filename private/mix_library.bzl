@@ -51,12 +51,13 @@ def _mix_compile_impl(ctx):
 
     erl_libs_dir = ctx.label.name + "_deps"
 
+    deps = flat_deps(ctx.attr.deps)
     erl_libs_files = erl_libs_contents(
         ctx,
         target_info = None,
         headers = True,
         dir = erl_libs_dir,
-        deps = flat_deps(ctx.attr.deps),
+        deps = deps,
         # NOTE: even though we provide `ez_deps` here, these don't actually
         # correctly get added to our necessary include path. We explicitly set
         # MIX_ARCHIVES later to placate mix here.
@@ -65,6 +66,19 @@ def _mix_compile_impl(ctx):
         ez_deps = ctx.files.ez_deps,
         expand_ezs = False,
     )
+
+    # NOTE: dep priv is native code for the target platform; on a cross-arch
+    # leg, compile-time on_load would dlopen a wrong-arch .so. erl_libs_contents
+    # can't skip priv, so drop what it staged (those symlinks never get built).
+    dep_priv_prefixes = [
+        "/{}/{}/priv/".format(erl_libs_dir, dep[ErlangAppInfo].app_name)
+        for dep in deps
+    ]
+    erl_libs_files = [
+        f
+        for f in erl_libs_files
+        if not [p for p in dep_priv_prefixes if p in f.path]
+    ]
 
     # TODO:
     #  - confirm these are all as we expect
@@ -86,19 +100,6 @@ def _mix_compile_impl(ctx):
 
     (erlang_home, _, erlang_runfiles) = erlang_dirs(ctx)
     (elixir_home, elixir_runfiles) = elixir_dirs(ctx)
-
-    # Priv files are copied into the build dir as inputs (needed during
-    # compilation for NIFs, etc.) but NOT declared as outputs — priv output
-    # handling is done by _mix_priv in normal platform config.
-    priv_copy_to_build_dir = ""
-    if ctx.files.priv:
-        build_dir_cmds = []
-        for priv_file in ctx.files.priv:
-            rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
-            src_path = priv_file.path
-            build_dir_cmds.append('mkdir -p "priv/$(dirname {})"'.format(rel_path))
-            build_dir_cmds.append('cp -L "$ORIG_PWD/{}" "priv/{}"'.format(src_path, rel_path))
-        priv_copy_to_build_dir = "\n".join(build_dir_cmds)
 
     # TODO: confirm if we need to use include dir from other modules, or if
     # that's just a way for elixir to expose and interface to erlang.
@@ -127,10 +128,6 @@ then
 fi
 
 cd "{build_dir}"
-
-# Copy priv files into build directory BEFORE compilation
-# This makes them available to Mix tasks, NIFs, etc. during compilation
-{priv_copy_to_build_dir}
 
 # TODO: need to confirm deps are put into correct place here re: ERL_LIBS and
 # ELIXIR_ERL_OPTIONS
@@ -182,13 +179,12 @@ cp _output/{mix_env}/lib/{app_name}/ebin/*.beam _output/{mix_env}/lib/{app_name}
         env = env,
         # setup = ctx.attr.setup,
         out_dir = ebin.path,
-        priv_copy_to_build_dir = priv_copy_to_build_dir,
         # elixirc_opts = " ".join([shell.quote(opt) for opt in ctx.attr.elixirc_opts]),
         srcs = " ".join([f.path for f in ctx.files.srcs]),
     )
 
     inputs = depset(
-        direct = ctx.files.srcs + ctx.files.config + ctx.files.data + ctx.files.include + ctx.files.priv + erl_libs_files + [ctx.file.mix_config],
+        direct = ctx.files.srcs + ctx.files.config + ctx.files.data + ctx.files.include + erl_libs_files + [ctx.file.mix_config],
         transitive = [
             erlang_runfiles.files,
             elixir_runfiles.files,
@@ -230,9 +226,6 @@ _mix_compile = rule(
         "deps": attr.label_list(
             providers = [ErlangAppInfo],
         ),
-        "priv": attr.label_list(
-            allow_files = True,
-        ),
         "include": attr.label_list(
             allow_files = [".hrl"],
         ),
@@ -245,18 +238,48 @@ _mix_compile = rule(
 
 # --- _mix_priv: platform-dependent priv file handling ---
 
+def _strip_nif_suffix(path):
+    for suffix in (".so", ".dylib", ".dll"):
+        if path.endswith(suffix):
+            return path[:-len(suffix)]
+    return path
+
 def _mix_priv_impl(ctx):
     # Create individual priv file symlinks rather than a directory artifact.
     # A directory artifact named "priv" causes path doubling (priv/priv/...)
     # in any consumer that places priv files under a priv/ directory, because
     # additional_file_dest_relative_path returns "priv" which doesn't match
     # the startswith("priv/") check.
+    data_paths = {f.path: None for f in ctx.files.data}
     priv_files = []
+    dest_paths = []
     for priv_file in ctx.files.priv:
+        if priv_file.path in data_paths:
+            fail(("{}: {} is in both `priv` and `data`. `data` goes to mix " +
+                  "compile, so a native artifact there is built for the target " +
+                  "platform and loaded on the exec host. Remove it from `data`.").format(
+                ctx.label,
+                priv_file.short_path,
+            ))
         rel_path = _priv_file_dest_relative_path(ctx.label, priv_file)
+        dest_paths.append(path_join("priv", rel_path))
         out = ctx.actions.declare_file(path_join("priv", rel_path))
         ctx.actions.symlink(output = out, target_file = priv_file)
         priv_files.append(out)
+
+    # The .so is no longer present at compile time, so rustler can't catch a
+    # path mismatch itself; on_load failures are only ever logged. Compare the
+    # way `rustler_init` does: suffix stripped, relative to the app dir.
+    prebuilt = ctx.attr.env.get("RUSTLER_FORCE_USE_PREBUILT")
+    if prebuilt != None:
+        wanted = _strip_nif_suffix(prebuilt)
+        if wanted not in [_strip_nif_suffix(p) for p in dest_paths]:
+            fail(("{}: RUSTLER_FORCE_USE_PREBUILT is {}, but no `priv` file is " +
+                  "staged there. Staged priv files: {}").format(
+                ctx.label,
+                repr(prebuilt),
+                dest_paths,
+            ))
 
     return [DefaultInfo(
         files = depset(priv_files),
@@ -269,6 +292,10 @@ _mix_priv = rule(
         "priv": attr.label_list(
             allow_files = True,
         ),
+        "data": attr.label_list(
+            allow_files = True,
+        ),
+        "env": attr.string_dict(),
     },
 )
 
@@ -374,6 +401,18 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
 
     Splits compilation into platform-independent (.beam/.app) and
     platform-dependent (priv/) artifacts for cross-platform cache reuse.
+
+    `priv` is for platform-dependent native artifacts (e.g. Rustler NIFs).
+    They are built for the target platform, are NOT present during mix
+    compile (for this library or its dependents), and are placed under
+    `priv/` in the app. A file may not be in both `priv` and `data`.
+
+    `data` is for arch-independent files, including static `priv/**`
+    content (templates, assets, fixtures). It is present during mix compile
+    and in runfiles.
+
+    If `env` sets `RUSTLER_FORCE_USE_PREBUILT`, it must name a `priv` file's
+    staged path (e.g. `priv/native/foo/libfoo.so`), or analysis fails.
     """
 
     # Attrs that go to _mix_compile
@@ -400,24 +439,32 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         "include",
     )}
 
-    # mix compile runs without a platform transition so that native deps
-    # resolve with full CPU/OS constraints. Unfortunately that means we
-    # compile elixir BEAM twice in multi-arch cases, but the redundancy is
-    # acceptable to also ensure we don't mix and match OTP versions.
+    # NOTE: mix compile still runs in the target config, so multi-arch builds
+    # compile identical BEAM once per arch. See docs/priv_platform_split.md
+    # (phase 2) for why a transition here isn't a one-liner.
     _mix_compile(
         name = name + "_compile",
         app_name = app_name,
-        priv = priv,
         visibility = ["//visibility:private"],
         **compile_kwargs
     )
 
     # Platform-dependent: priv file symlinks
+    # _mix_priv only exists with priv, so its RUSTLER_FORCE_USE_PREBUILT check
+    # can't catch the var being set with nothing staged at all.
+    env = kwargs.get("env", {})
+    if not priv and type(env) == "dict" and "RUSTLER_FORCE_USE_PREBUILT" in env:
+        fail("{}: RUSTLER_FORCE_USE_PREBUILT is set, but `priv` is empty.".format(
+            native.package_relative_label(name),
+        ))
+
     priv_target = None
     if priv:
         _mix_priv(
             name = name + "_priv",
             priv = priv,
+            data = kwargs.get("data", []),
+            env = kwargs.get("env", {}),
             visibility = ["//visibility:private"],
         )
         priv_target = ":" + name + "_priv"
