@@ -1,5 +1,6 @@
 load(
     "@bazel_skylib//rules:common_settings.bzl",
+    "bool_flag",
     "string_flag",
 )
 
@@ -12,6 +13,19 @@ string_flag(
 string_flag(
     name = "elixir_platform",
     build_setting_default = "",
+    visibility = ["//visibility:public"],
+)
+
+# Set only by platform_independent_transition; see private/beam_transitions.bzl.
+bool_flag(
+    name = "beam_only",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "beam_only_enabled",
+    flag_values = {":beam_only": "True"},
     visibility = ["//visibility:public"],
 )
 

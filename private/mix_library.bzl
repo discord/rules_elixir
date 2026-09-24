@@ -233,6 +233,7 @@ _mix_compile = rule(
             allow_files = [".ez"],
         ),
     },
+    cfg = platform_independent_transition,
     toolchains = ["//:toolchain_type"],
 )
 
@@ -439,9 +440,10 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         "include",
     )}
 
-    # NOTE: mix compile still runs in the target config, so multi-arch builds
-    # compile identical BEAM once per arch. See docs/priv_platform_split.md
-    # (phase 2) for why a transition here isn't a one-liner.
+    # _mix_compile transitions to a platform-independent config, so
+    # multi-arch builds compile BEAM once. That only happens when
+    # //:elixir_platform or @rules_erlang//:erlang_platform is set; otherwise
+    # the transition keeps the target platform. See private/beam_transitions.bzl.
     _mix_compile(
         name = name + "_compile",
         app_name = app_name,
@@ -467,7 +469,14 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
             env = kwargs.get("env", {}),
             visibility = ["//visibility:private"],
         )
-        priv_target = ":" + name + "_priv"
+
+        # Dependents' _mix_compile reaches this target through `deps`, in the
+        # beam_only config. Its native priv isn't needed there and can't be
+        # analyzed there: that platform may have no OS/CPU constraints.
+        priv_target = select({
+            Label("//:beam_only_enabled"): None,
+            "//conditions:default": ":" + name + "_priv",
+        })
 
     # Aggregator: provides ErlangAppInfo + MixProjectInfo
     _mix_library_info(
