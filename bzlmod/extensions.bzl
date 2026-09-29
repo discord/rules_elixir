@@ -56,6 +56,11 @@ def _elixir_config(ctx):
             # Create repository for downloading and building Elixir source.
             # The http_archive repo doesn't have @erlang_config in its repo
             # mapping, so we use the canonical name resolved above.
+            #
+            # NOTE: exec_compatible_with pins these actions to the toolchain's
+            # exec constraints. They run the arch-specific erl from `otp`, and
+            # without it they take the first registered exec platform, which
+            # fails with exit 126 once a foreign-arch one is registered first.
             http_archive(
                 name = "elixir_source_{}".format(elixir.name),
                 url = elixir.url,
@@ -68,6 +73,7 @@ elixir_build(
     name = "elixir_build",
     srcs = glob(["**/*"]),
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
+    exec_compatible_with = {exec_compatible_with},
     visibility = ["//visibility:public"],
 )
 
@@ -83,6 +89,7 @@ elixir_prebuilt_tarball(
 """.format(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
+                    exec_compatible_with = repr(exec_compatible_withs[elixir.name]),
                     name = elixir.name,
                 ),
             )
@@ -106,6 +113,7 @@ elixir_prebuilt_tarball(
             # Create repository for downloading and building Elixir source.
             # The http_archive repo doesn't have @erlang_config in its repo
             # mapping, so we use the canonical name resolved above.
+            # exec_compatible_with: see NOTE on internal_elixir_from_http_archive.
             http_archive(
                 name = "elixir_source_{}".format(elixir.name),
                 url = url,
@@ -118,6 +126,7 @@ elixir_build(
     name = "elixir_build",
     srcs = glob(["**/*"]),
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
+    exec_compatible_with = {exec_compatible_with},
     visibility = ["//visibility:public"],
 )
 
@@ -134,6 +143,7 @@ elixir_prebuilt_tarball(
 """.format(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
+                    exec_compatible_with = repr(exec_compatible_withs[elixir.name]),
                     name = elixir.name,
                 ),
             )
@@ -152,6 +162,7 @@ elixir_prebuilt_tarball(
             # Fetch a *precompiled* Elixir release and stage it (no source build)
             # via elixir_prebuilt. The target stays named "elixir_build" so the
             # generated internal toolchain BUILD (BUILD_internal.tpl) resolves.
+            # exec_compatible_with: see NOTE on internal_elixir_from_http_archive.
             http_archive(
                 name = "elixir_source_{}".format(elixir.name),
                 url = elixir.url,
@@ -164,11 +175,13 @@ elixir_prebuilt(
     name = "elixir_build",
     srcs = glob(["**/*"]),
     otp = "@@{erlang_config_repo}//{otp}:otp-{otp}",
+    exec_compatible_with = {exec_compatible_with},
     visibility = ["//visibility:public"],
 )
 """.format(
                     erlang_config_repo = erlang_config_repo,
                     otp = elixir.otp,
+                    exec_compatible_with = repr(exec_compatible_withs[elixir.name]),
                 ),
             )
 
