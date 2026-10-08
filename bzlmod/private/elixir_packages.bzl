@@ -50,6 +50,8 @@ mix_library(
                 commit = dep.commit,
                 build_file = dep.build_file,
                 build_file_content = dep.build_file_content,
+                patches = dep.patches,
+                patch_args = dep.patch_args,
                 patch_cmds = dep.patch_cmds,
                 testonly = dep.testonly,
                 strip_prefix = dep.strip_prefix,
