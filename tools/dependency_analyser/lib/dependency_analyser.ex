@@ -117,20 +117,10 @@ defmodule DependencyAnalyser do
       end)
       |> Enum.reject(&is_nil/1)
 
-    # Extract detailed dep metadata (only:, env:, runtime: options)
-    dep_details =
-      raw_deps
-      |> Enum.map(fn
-        {name, _} when is_atom(name) -> %{name: Atom.to_string(name)}
-        {name, _, opts} when is_atom(name) -> extract_dep_detail(name, opts)
-        _ -> nil
-      end)
-      |> Enum.reject(&is_nil/1)
-
     %{
       app_name: app_name,
       deps: immediate_deps,
-      dep_details: dep_details,
+      dep_details: dep_details(raw_deps),
       source: %{type: "path", path: Path.relative_to(project_dir, root_dir)},
       files: scan_files(app_name, project_dir)
     }
@@ -285,6 +275,16 @@ defmodule DependencyAnalyser do
   # ---------------------------------------------------------------------------
   # Dep detail extraction (only:, env:, runtime: from mix.exs dep opts)
   # ---------------------------------------------------------------------------
+
+  defp dep_details(raw_deps) do
+    Enum.flat_map(raw_deps, fn
+      # `{:app, path: ..., only: :test}`: options, no requirement.
+      {name, opts} when is_atom(name) and is_list(opts) -> [extract_dep_detail(name, opts)]
+      {name, _req} when is_atom(name) -> [%{name: Atom.to_string(name)}]
+      {name, _req, opts} when is_atom(name) -> [extract_dep_detail(name, opts)]
+      _ -> []
+    end)
+  end
 
   defp extract_dep_detail(dep_name, opts) when is_list(opts) do
     detail = %{name: Atom.to_string(dep_name)}
