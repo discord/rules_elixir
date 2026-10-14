@@ -400,6 +400,16 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         "include",
     )}
 
+    # Everything else is a common attribute (tags, testonly,
+    # target_compatible_with, ...), so every target here gets it. The mix
+    # action lives on `<name>_compile`, so execution tags like `no-remote`
+    # and `manual` have no effect unless they reach it.
+    common_kwargs = {
+        k: v
+        for k, v in kwargs.items()
+        if k not in compile_kwargs and k not in info_kwargs
+    }
+
     # mix compile runs without a platform transition so that native deps
     # resolve with full CPU/OS constraints. Unfortunately that means we
     # compile elixir BEAM twice in multi-arch cases, but the redundancy is
@@ -409,7 +419,7 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         app_name = app_name,
         priv = priv,
         visibility = ["//visibility:private"],
-        **compile_kwargs
+        **dict(compile_kwargs, **common_kwargs)
     )
 
     # Platform-dependent: priv file symlinks
@@ -419,6 +429,7 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
             name = name + "_priv",
             priv = priv,
             visibility = ["//visibility:private"],
+            **common_kwargs
         )
         priv_target = ":" + name + "_priv"
 
@@ -429,5 +440,5 @@ def mix_library(name, app_name, priv = [], visibility = None, **kwargs):
         compile = ":" + name + "_compile",
         priv_target = priv_target,
         visibility = visibility,
-        **info_kwargs
+        **dict(info_kwargs, **common_kwargs)
     )
