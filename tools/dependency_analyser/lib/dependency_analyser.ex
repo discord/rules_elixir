@@ -1,15 +1,62 @@
 defmodule DependencyAnalyser do
+  @usage """
+  Usage: dependency_analyser [--mode light|heavy] [--dir DIR] [--root ROOT]
+                             [--seed-lock-from DIR1,DIR2,...]
+
+    --mode, -m        light (default) or heavy.
+    --dir, -d         The Mix project to analyse. Default: the current directory.
+    --root, -r        Write source.path values relative to this directory.
+                      Default: the --dir project.
+    --seed-lock-from  Comma-separated project directories. The analyser merges
+                      their mix.lock files and OVERWRITES the lockfile of the
+                      --dir project with the result before it does anything
+                      else. Use this when --dir is a generated project that has
+                      these projects as path dependencies, because Mix reads
+                      only the lock of the top-level project.
+    --help, -h        Show this text.
+
+  Modes:
+
+    light  No fetch. In-tree (path) packages get full metadata. External
+           packages are stubs, and their deps come from the lock.
+    heavy  Fetches all packages and includes full Hex and git metadata.
+
+  Output: a JSON array of package entries on stdout. The --dir project has
+  "role": "project". A path entry whose directory is one of the
+  --seed-lock-from directories has "role": "root". Path entries and the
+  project entry have "dep_details": the only/env/runtime options of each
+  declared dependency, evaluated in the Mix env that Mix loads that project
+  with.
+
+  Lock seeding:
+
+    A key that the seed projects lock to different values stays out of the
+    seed (a "seed conflict").
+
+    heavy  After the fetch, the lock must equal the seed. Any added, changed
+           or removed entry is an error. A seed conflict that is not in the
+           lock after the fetch is outside the dependency graph, and gets a
+           warning.
+    light  A seed conflict on an app in the converged graph is an error.
+           Any other seed conflict gets a warning. Light mode does not fetch,
+           so it cannot see an entry that Hex resolves again. Heavy mode is
+           the authority.
+
+    Errors and warnings go to stderr, one line each, prefixed "error: " or
+    "warning: ".
+
+  Exit status: 0 on success. 1 if a lock check fails, and then stdout is
+  empty. 2 for a usage error. An uncaught error, for example a dependency
+  that diverged, exits non-zero from the escript runtime.
+  """
+
   @moduledoc """
   Lightweight dependency analyser for Mix projects.
 
-  Two modes:
-  - `light`: No fetching, only scans in-tree (path) deps. External deps are
-    emitted as stubs (type only, no metadata). Fast, meant to run frequently.
-  - `heavy`: Fetches all deps, scans everything, includes full hex/git metadata.
-    Expensive, run when third-party deps change.
-
-  Output: JSON array of package entries on stdout.
+  #{@usage}
   """
+
+  alias DependencyAnalyser.SeedLock
 
   def main(args \\ System.argv()) do
     # Escripts pass argv as charlists (Erlang strings), but OptionParser
@@ -19,14 +66,38 @@ defmodule DependencyAnalyser do
       arg when is_binary(arg) -> arg
     end)
 
-    {opts, _rest, _invalid} =
+    {opts, rest, invalid} =
       OptionParser.parse(args,
-        switches: [dir: :string, mode: :string, root: :string],
-        aliases: [d: :dir, m: :mode, r: :root]
+        strict: [
+          dir: :string,
+          mode: :string,
+          root: :string,
+          seed_lock_from: :string,
+          help: :boolean
+        ],
+        aliases: [d: :dir, m: :mode, r: :root, h: :help]
       )
 
+    if opts[:help] do
+      IO.write(@usage)
+      System.halt(0)
+    end
+
+    if rest != [] or invalid != [] do
+      usage_error("unexpected arguments: #{inspect(rest ++ Enum.map(invalid, &elem(&1, 0)))}")
+    end
+
     dir = Keyword.get(opts, :dir, ".")
-    mode = Keyword.get(opts, :mode, "light") |> String.to_atom()
+
+    mode =
+      case Keyword.get(opts, :mode, "light") do
+        "light" -> :light
+        "heavy" -> :heavy
+        other -> usage_error("unknown mode: #{other}")
+      end
+
+    # Expand before the cd, so relative paths mean what the caller meant.
+    seed_dirs = parse_seed_dirs(opts[:seed_lock_from])
 
     File.cd!(dir)
 
@@ -41,27 +112,98 @@ defmodule DependencyAnalyser do
     # Falls back to project dir if --root is not provided.
     root_dir = Keyword.get(opts, :root, File.cwd!())
 
+    seed = seed_lock(seed_dirs)
+
     case mode do
-      :light -> run_light(config, root_dir)
-      :heavy -> run_heavy(config, root_dir)
-      other -> IO.puts(:stderr, "unknown mode: #{other}"); System.halt(1)
+      :light -> run_light(config, root_dir, seed)
+      :heavy -> run_heavy(config, root_dir, seed)
     end
+  end
+
+  defp usage_error(message) do
+    IO.puts(:stderr, "error: #{message}\n\n#{@usage}")
+    System.halt(2)
+  end
+
+  defp parse_seed_dirs(nil), do: nil
+
+  defp parse_seed_dirs(value) do
+    dirs = value |> String.split(",", trim: true) |> Enum.map(&Path.expand/1)
+
+    if dirs == [], do: usage_error("--seed-lock-from needs at least one directory")
+
+    for dir <- dirs, not File.regular?(Path.join(dir, "mix.exs")) do
+      usage_error("--seed-lock-from: #{dir} is not a Mix project (no mix.exs)")
+    end
+
+    dirs
+  end
+
+  # ---------------------------------------------------------------------------
+  # Lock seeding
+  # ---------------------------------------------------------------------------
+
+  defp seed_lock(nil), do: nil
+
+  defp seed_lock(dirs) do
+    locks = SeedLock.read(dirs)
+
+    for {dir, lock} <- locks, lock == %{} do
+      IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no mix.lock entries")
+    end
+
+    {lock, conflicts} = SeedLock.merge(locks)
+    Mix.Dep.Lock.write(lock)
+    %{dirs: MapSet.new(dirs), lock: lock, conflicts: conflicts}
+  end
+
+  defp check_converged!(nil, _deps), do: :ok
+
+  defp check_converged!(seed, deps) do
+    report!(SeedLock.check_converged(seed.conflicts, Enum.map(deps, & &1.app)))
+  end
+
+  defp check_fetched!(nil), do: :ok
+
+  defp check_fetched!(seed) do
+    report!(SeedLock.check_fetched(seed.lock, Mix.Dep.Lock.read(), seed.conflicts))
+  end
+
+  defp report!({errors, warnings}) do
+    Enum.each(warnings ++ errors, &IO.puts(:stderr, &1))
+    if errors != [], do: System.halt(1)
+    :ok
+  end
+
+  defp warn_unused_seed_dirs(nil, _project_dir, _deps), do: :ok
+
+  defp warn_unused_seed_dirs(seed, project_dir, deps) do
+    path_dirs = for dep <- deps, path_dep?(dep), do: Path.expand(dep.opts[:dest])
+    used = MapSet.new([project_dir | path_dirs])
+
+    for dir <- Enum.sort(seed.dirs), dir not in used do
+      IO.puts(:stderr, "warning: --seed-lock-from: #{dir} is not a path dependency in the graph")
+    end
+
+    :ok
   end
 
   # ---------------------------------------------------------------------------
   # Light mode: no fetching, full metadata for path deps, stubs for externals
   # ---------------------------------------------------------------------------
 
-  defp run_light(config, root_dir) do
+  defp run_light(config, root_dir, seed) do
     deps = converge_deps()
     project_dir = File.cwd!()
+    check_converged!(seed, deps)
+    warn_unused_seed_dirs(seed, project_dir, deps)
 
     root_entry = build_root_entry(config, project_dir, root_dir)
 
     dep_entries =
       Enum.map(deps, fn dep ->
         case classify_dep(dep) do
-          :path -> build_path_entry(dep, root_dir)
+          :path -> build_path_entry(dep, root_dir, seed)
           type -> build_stub_entry(dep, type)
         end
       end)
@@ -73,20 +215,22 @@ defmodule DependencyAnalyser do
   # Heavy mode: fetch everything, full metadata for all deps
   # ---------------------------------------------------------------------------
 
-  defp run_heavy(config, root_dir) do
+  defp run_heavy(config, root_dir, seed) do
     # Fetch deps first
     lock = Mix.Dep.Lock.read()
     _apps = Mix.Dep.Fetcher.all(%{}, lock, [])
+    check_fetched!(seed)
 
     deps = converge_deps()
     project_dir = File.cwd!()
+    warn_unused_seed_dirs(seed, project_dir, deps)
 
     root_entry = build_root_entry(config, project_dir, root_dir)
 
     dep_entries =
       Enum.map(deps, fn dep ->
         case classify_dep(dep) do
-          :path -> build_path_entry(dep, root_dir)
+          :path -> build_path_entry(dep, root_dir, seed)
           :hex -> build_hex_entry(dep)
           :git -> build_git_entry(dep)
           :unknown ->
@@ -121,21 +265,25 @@ defmodule DependencyAnalyser do
       app_name: app_name,
       deps: immediate_deps,
       dep_details: dep_details(raw_deps),
+      role: "project",
       source: %{type: "path", path: Path.relative_to(project_dir, root_dir)},
       files: scan_files(app_name, project_dir)
     }
   end
 
-  defp build_path_entry(%Mix.Dep{app: app, opts: opts} = dep, root_dir) do
+  defp build_path_entry(%Mix.Dep{app: app, opts: opts} = dep, root_dir, seed) do
     app_name = Atom.to_string(app)
     dest = Keyword.get(opts, :dest)
 
-    %{
+    entry = %{
       app_name: app_name,
       deps: extract_dep_names(dep),
+      dep_details: path_dep_details(dep),
       source: %{type: "path", path: Path.relative_to(dest, root_dir)},
       files: scan_files(app_name, dest)
     }
+
+    if seed && Path.expand(dest) in seed.dirs, do: Map.put(entry, :role, "root"), else: entry
   end
 
   defp build_stub_entry(%Mix.Dep{app: app} = dep, type) do
@@ -232,11 +380,13 @@ defmodule DependencyAnalyser do
   # Dependency classification and name extraction
   # ---------------------------------------------------------------------------
 
-  defp classify_dep(%Mix.Dep{opts: opts}) do
+  defp path_dep?(%Mix.Dep{opts: opts}), do: Keyword.has_key?(opts, :path)
+
+  defp classify_dep(%Mix.Dep{opts: opts} = dep) do
     lock = Keyword.get(opts, :lock)
 
     cond do
-      Keyword.has_key?(opts, :path) -> :path
+      path_dep?(dep) -> :path
       match?({:hex, _, _, _}, lock) or match?({:hex, _, _, _, _, _, _, _}, lock) -> :hex
       Keyword.has_key?(opts, :git) -> :git
       # Default to hex for anything with a hex-shaped lock
@@ -284,6 +434,18 @@ defmodule DependencyAnalyser do
       {name, _req, opts} when is_atom(name) -> [extract_dep_detail(name, opts)]
       _ -> []
     end)
+  end
+
+  # The converged opts of a dep merge what every parent declared, so they
+  # are not what this project declared. Evaluate the project's own mix.exs
+  # instead, in the env that Mix loaded it with, because options such as
+  # `runtime: Mix.env() != :test` only have a value after evaluation.
+  defp path_dep_details(%Mix.Dep{opts: opts} = dep) do
+    if Mix.Dep.mix?(dep) and File.regular?(Path.join(opts[:dest], "mix.exs")) do
+      Mix.Dep.in_dependency(dep, fn _module -> dep_details(Mix.Project.config()[:deps] || []) end)
+    else
+      []
+    end
   end
 
   defp extract_dep_detail(dep_name, opts) when is_list(opts) do

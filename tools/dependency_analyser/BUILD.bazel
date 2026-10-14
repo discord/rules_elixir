@@ -9,6 +9,7 @@ elixir_app(
     srcs = [
         "lib/dependency_analyser.ex",
         "lib/dependency_analyser/cargo_toml.ex",
+        "lib/dependency_analyser/seed_lock.ex",
     ],
     app_name = "dependency_analyser",
     deps = [
@@ -38,12 +39,35 @@ escript_wrapper(
     out = "dependency_analyser",
 )
 
+TEST_ENV = {
+    "ERL_COMPILER_OPTIONS": "deterministic",
+    "ELIXIR_ERL_OPTIONS": "+fnu",
+}
+
 ex_unit_test(
     name = "cargo_toml_test",
     srcs = ["test/cargo_toml_test.exs"],
     data = ["lib/dependency_analyser/cargo_toml.ex"],
-    env = {
-        "ERL_COMPILER_OPTIONS": "deterministic",
-        "ELIXIR_ERL_OPTIONS": "+fnu",
-    },
+    env = TEST_ENV,
+)
+
+ex_unit_test(
+    name = "seed_lock_test",
+    srcs = [
+        "test/test_helper.exs",
+        "test/seed_lock_test.exs",
+    ],
+    data = ["lib/dependency_analyser/seed_lock.ex"],
+    env = TEST_ENV,
+)
+
+# NOTE: the heavy-mode cases run the git on PATH against a local repository.
+ex_unit_test(
+    name = "dependency_analyser_test",
+    srcs = [
+        "test/test_helper.exs",
+        "test/dependency_analyser_test.exs",
+    ],
+    env = TEST_ENV,
+    tools = [":dependency_analyser"],
 )
