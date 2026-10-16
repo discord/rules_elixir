@@ -109,6 +109,40 @@ defmodule DependencyAnalyserTest do
       refute File.exists?(Path.join([tmp, "meta", "mix.lock"]))
     end
 
+    test "matches a seed directory through a symlink, and warns about one outside the graph",
+         %{tmp: tmp} do
+      light_fixture!(tmp)
+      link = Path.join(tmp, "link_to_app_a")
+      File.ln_s!(Path.join(tmp, "app_a"), link)
+      stray = Path.join(tmp, "stray")
+      project!(stray, :stray, "[]")
+      seed = Enum.join([link, Path.join(tmp, "app_b"), stray], ",")
+
+      assert {0, out, err} =
+               run(tmp, ["--dir", Path.join(tmp, "meta"), "--root", tmp, "--seed-lock-from", seed])
+
+      assert err ==
+               "warning: --seed-lock-from: #{stray} has no mix.lock entries\n" <>
+                 "warning: lock conflict outside the dependency graph, ignored: dev_tool " <>
+                 "(seed conflict: #{link}: hex 1.0.0; #{tmp}/app_b: hex 1.1.0)\n" <>
+                 "warning: --seed-lock-from: #{stray} is not a path dependency in the graph\n"
+
+      assert entries(out)["app_a"]["role"] == "root"
+    end
+
+    # The analyser expands a seed path before it changes into --dir.
+    test "reads a relative seed directory from the directory it starts in", %{tmp: tmp} do
+      light_fixture!(tmp)
+      app_a =
+        Path.relative_to(real_path(Path.join(tmp, "app_a")), real_path(start_dir()), force: true)
+      seed = "#{app_a},#{Path.join(tmp, "app_b")}"
+
+      assert {0, out, _err} =
+               run(tmp, ["--dir", Path.join(tmp, "meta"), "--root", tmp, "--seed-lock-from", seed])
+
+      assert entries(out)["app_a"]["role"] == "root"
+    end
+
     test "rejects a seed directory that is not a Mix project", %{tmp: tmp} do
       light_fixture!(tmp)
       missing = Path.join(tmp, "missing")
@@ -317,8 +351,7 @@ defmodule DependencyAnalyserTest do
 
     {out, status} =
       System.cmd("bash", ["-c", ~s(exec "$0" "$@" 2>"$ANALYSER_STDERR"), wrapper | args],
-        # The wrapper finds the escript relative to the main repository.
-        cd: Path.join(srcdir, System.fetch_env!("TEST_WORKSPACE")),
+        cd: start_dir(),
         env: [
           {"ANALYSER_STDERR", stderr},
           # Without a UTF-8 locale, Elixir prints a warning on stderr.
@@ -331,6 +364,14 @@ defmodule DependencyAnalyserTest do
 
     {status, out, File.read!(stderr)}
   end
+
+  # The wrapper finds the escript relative to the main repository.
+  defp start_dir,
+    do: Path.join(System.fetch_env!("TEST_SRCDIR"), System.fetch_env!("TEST_WORKSPACE"))
+
+  # What the analyser compares and expands against: getcwd(3) resolves
+  # symlinks.
+  defp real_path(dir), do: File.cd!(dir, &File.cwd!/0)
 
   defp entries(out), do: out |> decode_json!() |> Map.new(&{&1["app_name"], &1})
 

@@ -164,7 +164,21 @@ defmodule DependencyAnalyser do
 
     {lock, conflicts} = SeedLock.merge(locks)
     Mix.Dep.Lock.write(lock)
-    %{dirs: MapSet.new(dirs), lock: lock, conflicts: conflicts}
+    %{
+      dirs: Enum.uniq(dirs),
+      roots: MapSet.new(dirs, &real_path/1),
+      lock: lock,
+      conflicts: conflicts
+    }
+  end
+
+  # The caller and a mix.exs can name one directory in two ways, for example
+  # through a symlink. getcwd(3) resolves symlinks, so compare what it returns.
+  defp real_path(dir) do
+    File.cd!(dir, &File.cwd!/0)
+  rescue
+    # Mix keeps a path dep whose directory is missing, as unavailable.
+    File.Error -> Path.expand(dir)
   end
 
   defp check_converged(nil, _deps), do: :ok
@@ -187,12 +201,11 @@ defmodule DependencyAnalyser do
   defp warn_unused_seed_dirs(nil, _project_dir, _deps), do: :ok
 
   defp warn_unused_seed_dirs(seed, project_dir, deps) do
-    path_dirs = for dep <- deps, path_dep?(dep), do: Path.expand(dep.opts[:dest])
-    used = MapSet.new([project_dir | path_dirs])
+    path_dirs = for dep <- deps, path_dep?(dep), do: dep.opts[:dest]
+    used = MapSet.new([project_dir | path_dirs], &real_path/1)
 
     seed.dirs
-    |> Enum.sort()
-    |> Enum.reject(&(&1 in used))
+    |> Enum.reject(&(real_path(&1) in used))
     |> Enum.each(fn dir ->
       IO.puts(:stderr, "warning: --seed-lock-from: #{dir} is not a path dependency in the graph")
     end)
@@ -296,7 +309,7 @@ defmodule DependencyAnalyser do
       files: scan_files(app_name, dest)
     }
 
-    if seed && Path.expand(dest) in seed.dirs, do: Map.put(entry, :role, "root"), else: entry
+    if seed && real_path(dest) in seed.roots, do: Map.put(entry, :role, "root"), else: entry
   end
 
   defp build_stub_entry(%Mix.Dep{app: app} = dep, type) do
