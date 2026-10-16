@@ -8,6 +8,9 @@
 defmodule DependencyAnalyserTest do
   use ExUnit.Case, async: true
 
+  # See test_helper.exs.
+  @moduletag :json
+
   setup context do
     base = System.get_env("TEST_TMPDIR") || System.tmp_dir!()
     name = context.test |> Atom.to_string() |> String.replace(~r/[^A-Za-z0-9]+/, "_")
@@ -81,7 +84,7 @@ defmodule DependencyAnalyserTest do
       light_fixture!(tmp, "1.0.0")
 
       assert {0, out, ""} =
-               run(["--mode", "light", "--dir", Path.join(tmp, "meta"), "--root", tmp])
+               run(tmp, ["--mode", "light", "--dir", Path.join(tmp, "meta"), "--root", tmp])
 
       entries = entries(out)
       assert entries["meta"]["role"] == "project"
@@ -99,7 +102,7 @@ defmodule DependencyAnalyserTest do
       missing = Path.join(tmp, "missing")
 
       assert {2, "", err} =
-               run(["--dir", Path.join(tmp, "meta"), "--seed-lock-from", missing])
+               run(tmp, ["--dir", Path.join(tmp, "meta"), "--seed-lock-from", missing])
 
       assert err =~ "error: --seed-lock-from: #{missing} is not a Mix project"
     end
@@ -272,7 +275,7 @@ defmodule DependencyAnalyserTest do
   defp read_lock(dir), do: Mix.Dep.Lock.read(Path.join(dir, "mix.lock"))
 
   defp analyse(tmp, mode) do
-    run([
+    run(tmp, [
       "--mode",
       mode,
       "--dir",
@@ -285,14 +288,14 @@ defmodule DependencyAnalyserTest do
   end
 
   # Returns {exit_status, stdout, stderr}.
-  defp run(args) do
+  defp run(tmp, args) do
     srcdir = System.fetch_env!("TEST_SRCDIR")
     # The repository name differs between this module and a consumer.
     [wrapper] =
       Path.wildcard(Path.join(srcdir, "*/tools/dependency_analyser/dependency_analyser"))
 
-    tmp = System.get_env("TEST_TMPDIR") || System.tmp_dir!()
     stderr = Path.join(tmp, "stderr_#{System.unique_integer([:positive])}")
+    # Each test gets its own homes, because the tests run concurrently.
     home = Path.join(tmp, "home")
 
     {out, status} =
@@ -314,10 +317,8 @@ defmodule DependencyAnalyserTest do
 
   defp entries(out), do: out |> decode_json!() |> Map.new(&{&1["app_name"], &1})
 
-  # Elixir 1.18 ships JSON. Jason is not on the code path of this test.
-  defp decode_json!(text) do
-    if Code.ensure_loaded?(JSON),
-      do: apply(JSON, :decode!, [text]),
-      else: flunk("this test needs Elixir 1.18 or later, for the JSON module")
-  end
+  # Jason is not on the code path of this test, for the reason at the top of
+  # seed_lock_test.exs. apply/3 keeps Elixir before 1.18 from warning that
+  # JSON is undefined.
+  defp decode_json!(text), do: apply(JSON, :decode!, [text])
 end
