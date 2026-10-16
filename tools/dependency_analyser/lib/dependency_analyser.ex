@@ -37,9 +37,11 @@ defmodule DependencyAnalyser do
            or removed entry is an error. A seed conflict that is not in the
            lock after the fetch is outside the dependency graph, and gets a
            warning.
-    light  A seed conflict on an app in the converged graph is an error.
-           Any other seed conflict gets a warning. Light mode does not fetch,
-           so it cannot see an entry that Hex resolves again. Heavy mode is
+    light  A seed conflict on an app that the converged graph reaches is an
+           error. Light mode does not fetch, so it also follows the deps that
+           the lock lists for each package. Any other seed conflict gets a
+           warning. Light mode cannot see an entry that Hex resolves again,
+           or the deps of a git package that is not on disk. Heavy mode is
            the authority.
 
     Errors and warnings go to stderr, one line each, prefixed "error: " or
@@ -168,7 +170,7 @@ defmodule DependencyAnalyser do
   defp check_converged(nil, _deps), do: :ok
 
   defp check_converged(seed, deps) do
-    report(SeedLock.check_converged(seed.conflicts, Enum.map(deps, & &1.app)))
+    report(SeedLock.check_converged(seed.lock, Enum.map(deps, & &1.app), seed.conflicts))
   end
 
   defp check_fetched(nil), do: :ok

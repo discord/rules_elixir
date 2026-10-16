@@ -102,13 +102,19 @@ defmodule DependencyAnalyser.SeedLock do
 
   @doc """
   Checks the conflicts against the apps of a converged graph, without a
-  fetch. A conflicting key that is an app in the graph is an error.
+  fetch. A conflicting key that the graph reaches is an error.
+
+  Without a fetch, the graph stops at each package that is not on disk, but
+  its lock entry still lists its deps. So the check follows those lists from
+  `apps`, through `seed` and through each root's value of a conflicting key.
+  It skips an optional dep, because Mix includes one only when another
+  package requires it.
 
   Returns `{errors, warnings}` as lines for stderr.
   """
-  @spec check_converged(conflicts, Enumerable.t()) :: {[String.t()], [String.t()]}
-  def check_converged(conflicts, apps) do
-    apps = MapSet.new(apps)
+  @spec check_converged(lock, Enumerable.t(), conflicts) :: {[String.t()], [String.t()]}
+  def check_converged(seed, apps, conflicts) do
+    apps = reachable(Enum.to_list(apps), seed, conflicts, MapSet.new())
 
     errors =
       for {key, _} <- Enum.sort(conflicts), key in apps do
@@ -118,6 +124,29 @@ defmodule DependencyAnalyser.SeedLock do
     {summarise(errors, "lock conflict in the graph", "lock conflicts in the graph"),
      outside_graph(conflicts, &(&1 not in apps))}
   end
+
+  defp reachable([], _seed, _conflicts, seen), do: seen
+
+  defp reachable([app | rest], seed, conflicts, seen) do
+    if app in seen do
+      reachable(rest, seed, conflicts, seen)
+    else
+      values = List.wrap(seed[app]) ++ for({_root, value} <- conflicts[app] || [], do: value)
+      children = Enum.flat_map(values, &required_deps/1)
+      reachable(children ++ rest, seed, conflicts, MapSet.put(seen, app))
+    end
+  end
+
+  # A git entry does not list its deps. A Hex entry does, for example:
+  # `[{:telemetry, "~> 1.0", [hex: :telemetry, repo: "hexpm", optional: false]}]`
+  defp required_deps({:hex, _name, _version, _inner, _managers, deps, _repo, _outer})
+       when is_list(deps) do
+    for {app, _req, opts} when is_list(opts) <- deps,
+        not Keyword.get(opts, :optional, false),
+        do: app
+  end
+
+  defp required_deps(_value), do: []
 
   @doc """
   Describes a lock value in a few words, for example `hex 1.4.4`.

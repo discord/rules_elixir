@@ -7,9 +7,16 @@ defmodule DependencyAnalyser.SeedLockTest do
 
   alias DependencyAnalyser.SeedLock
 
-  defp hex(name, version, checksum \\ "inner") do
-    {:hex, name, version, checksum, [:mix], [], "hexpm", "outer"}
+  defp hex(name, version, opts \\ []) do
+    checksum = Keyword.get(opts, :checksum, "inner")
+    {:hex, name, version, checksum, [:mix], Keyword.get(opts, :deps, []), "hexpm", "outer"}
   end
+
+  # The shape of a dep in a Hex lock entry.
+  defp dep(app, optional \\ false),
+    do: {app, "~> 1.0", [hex: app, repo: "hexpm", optional: optional]}
+
+  defp split(app), do: [{"/a", hex(app, "1.0.0")}, {"/b", hex(app, "1.1.0")}]
 
   describe "merge/1" do
     test "keeps keys that agree or that one root has, and drops conflicts" do
@@ -43,8 +50,8 @@ defmodule DependencyAnalyser.SeedLockTest do
     test "treats any difference in the value as a conflict" do
       {seed, conflicts} =
         SeedLock.merge([
-          {"/a", %{x: hex(:x, "1.0.0", "one")}},
-          {"/b", %{x: hex(:x, "1.0.0", "two")}}
+          {"/a", %{x: hex(:x, "1.0.0", checksum: "one")}},
+          {"/b", %{x: hex(:x, "1.0.0", checksum: "two")}}
         ])
 
       assert seed == %{}
@@ -105,10 +112,10 @@ defmodule DependencyAnalyser.SeedLockTest do
     end
 
     test "shows full values when the short descriptions are the same" do
-      seed = %{a: hex(:a, "1.0.0", "one")}
+      seed = %{a: hex(:a, "1.0.0", checksum: "one")}
 
       assert {[error, _summary], []} =
-               SeedLock.check_fetched(seed, %{a: hex(:a, "1.0.0", "two")}, %{})
+               SeedLock.check_fetched(seed, %{a: hex(:a, "1.0.0", checksum: "two")}, %{})
 
       assert error =~ ~s("one")
       assert error =~ ~s("two")
@@ -121,15 +128,12 @@ defmodule DependencyAnalyser.SeedLockTest do
     end
   end
 
-  describe "check_converged/2" do
+  describe "check_converged/3" do
     test "fails on a conflict in the graph and warns about the others" do
-      conflicts = %{
-        in_graph: [{"/a", hex(:in_graph, "1.0.0")}, {"/b", hex(:in_graph, "1.1.0")}],
-        outside: [{"/a", hex(:outside, "1.0.0")}, {"/b", hex(:outside, "1.1.0")}]
-      }
+      conflicts = %{in_graph: split(:in_graph), outside: split(:outside)}
 
       assert {[error, _summary], [warning]} =
-               SeedLock.check_converged(conflicts, [:in_graph, :other])
+               SeedLock.check_converged(%{}, [:in_graph, :other], conflicts)
 
       assert error ==
                "error: lock conflict in the dependency graph: in_graph " <>
@@ -137,6 +141,32 @@ defmodule DependencyAnalyser.SeedLockTest do
 
       assert warning =~
                ~r/^warning: lock conflict outside the dependency graph, ignored: outside /
+    end
+
+    # Without a fetch, the converged graph has only the packages on disk. A
+    # cold run of a two-root meta-project saw 33 of 52 Hex packages.
+    test "follows the deps in the lock, but not optional deps" do
+      seed = %{
+        top: hex(:top, "1.0.0", deps: [dep(:middle), dep(:optional_dep, true)]),
+        middle: hex(:middle, "1.0.0", deps: [dep(:deep)])
+      }
+
+      conflicts = %{deep: split(:deep), optional_dep: split(:optional_dep)}
+
+      assert {[error, _summary], [warning]} = SeedLock.check_converged(seed, [:top], conflicts)
+      assert error =~ ~r/^error: lock conflict in the dependency graph: deep /
+      assert warning =~ ~r/ignored: optional_dep /
+    end
+
+    test "follows the deps of each root's value of a conflicting key" do
+      conflicts = %{
+        top: [{"/a", hex(:top, "1.0.0", deps: [dep(:child)])}, {"/b", hex(:top, "1.1.0")}],
+        child: split(:child)
+      }
+
+      assert {[child, top, _summary], []} = SeedLock.check_converged(%{}, [:top], conflicts)
+      assert child =~ ~r/^error: lock conflict in the dependency graph: child /
+      assert top =~ ~r/^error: lock conflict in the dependency graph: top /
     end
   end
 

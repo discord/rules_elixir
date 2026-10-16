@@ -21,7 +21,7 @@ defmodule DependencyAnalyserTest do
 
   describe "light mode" do
     test "seeds the lock, marks roles, and reads dep_details in each project's env", %{tmp: tmp} do
-      light_fixture!(tmp, "1.0.0")
+      light_fixture!(tmp)
 
       assert {0, out, err} = analyse(tmp, "light")
 
@@ -65,11 +65,11 @@ defmodule DependencyAnalyserTest do
       # Light mode takes the deps of an external stub from the seeded lock.
       assert entries["fake_hex"]["deps"] == ["transitive"]
 
-      assert Map.keys(read_lock(Path.join(tmp, "meta"))) == [:fake_hex]
+      assert Map.keys(read_lock(Path.join(tmp, "meta"))) == [:fake_hex, :transitive]
     end
 
     test "fails on a conflict in the graph and prints nothing on stdout", %{tmp: tmp} do
-      light_fixture!(tmp, "1.1.0")
+      light_fixture!(tmp, fake_hex: "1.1.0")
 
       assert {1, "", err} = analyse(tmp, "light")
 
@@ -80,8 +80,20 @@ defmodule DependencyAnalyserTest do
       assert err =~ "warning: lock conflict outside the dependency graph, ignored: dev_tool"
     end
 
+    # Light mode does not fetch fake_hex, so only its lock entry says that
+    # it needs transitive.
+    test "fails on a conflict that only a lock entry reaches", %{tmp: tmp} do
+      light_fixture!(tmp, transitive: "1.1.0")
+
+      assert {1, "", err} = analyse(tmp, "light")
+
+      assert err =~
+               "error: lock conflict in the dependency graph: transitive " <>
+                 "(seed conflict: #{tmp}/app_a: hex 1.0.0; #{tmp}/app_b: hex 1.1.0)\n"
+    end
+
     test "without a seed, writes no lock and marks only the project", %{tmp: tmp} do
-      light_fixture!(tmp, "1.0.0")
+      light_fixture!(tmp)
 
       assert {0, out, ""} =
                run(tmp, ["--mode", "light", "--dir", Path.join(tmp, "meta"), "--root", tmp])
@@ -98,7 +110,7 @@ defmodule DependencyAnalyserTest do
     end
 
     test "rejects a seed directory that is not a Mix project", %{tmp: tmp} do
-      light_fixture!(tmp, "1.0.0")
+      light_fixture!(tmp)
       missing = Path.join(tmp, "missing")
 
       assert {2, "", err} =
@@ -162,9 +174,12 @@ defmodule DependencyAnalyserTest do
   end
 
   # A meta-project with two roots that share lib_c. fake_hex is in the graph
-  # (test-only in roots that load with env: :test). dev_tool is not, because
-  # it is dev-only. app_b locks fake_hex to `fake_hex_b` and dev_tool to 1.1.0.
-  defp light_fixture!(tmp, fake_hex_b) do
+  # (test-only in roots that load with env: :test), and its lock entry needs
+  # transitive. dev_tool is not, because it is dev-only. app_a locks all
+  # three to 1.0.0. app_b locks dev_tool to 1.1.0, and the others to the
+  # versions in `app_b`.
+  defp light_fixture!(tmp, app_b \\ []) do
+    app_b = Keyword.merge([fake_hex: "1.0.0", transitive: "1.0.0"], app_b)
     meta!(tmp)
 
     project!(Path.join(tmp, "app_a"), :app_a, """
@@ -193,11 +208,13 @@ defmodule DependencyAnalyserTest do
 
     write_lock!(Path.join(tmp, "app_a"), %{
       fake_hex: hex(:fake_hex, "1.0.0", fake_hex_deps),
+      transitive: hex(:transitive, "1.0.0"),
       dev_tool: hex(:dev_tool, "1.0.0")
     })
 
     write_lock!(Path.join(tmp, "app_b"), %{
-      fake_hex: hex(:fake_hex, fake_hex_b, fake_hex_deps),
+      fake_hex: hex(:fake_hex, app_b[:fake_hex], fake_hex_deps),
+      transitive: hex(:transitive, app_b[:transitive]),
       dev_tool: hex(:dev_tool, "1.1.0")
     })
   end
