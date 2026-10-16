@@ -123,21 +123,14 @@ defmodule DependencyAnalyser.SeedLock do
   Describes a lock value in a few words, for example `hex 1.4.4`.
   """
   @spec describe(tuple) :: String.t()
-  def describe(value) do
-    case value do
-      {:hex, _name, version, _checksum, _managers, _deps, "hexpm", _outer} ->
-        "hex #{version}"
+  def describe({:hex, _name, version, _checksum, _managers, _deps, "hexpm", _outer}),
+    do: "hex #{version}"
 
-      {:hex, _name, version, _checksum, _managers, _deps, repo, _outer} ->
-        "hex #{version} (#{repo})"
+  def describe({:hex, _name, version, _checksum, _managers, _deps, repo, _outer}),
+    do: "hex #{version} (#{repo})"
 
-      {:git, url, ref, _opts} ->
-        "git #{url} #{ref}"
-
-      other ->
-        inspect(other, limit: :infinity)
-    end
-  end
+  def describe({:git, url, ref, _opts}), do: "git #{url} #{ref}"
+  def describe(other), do: inspect(other, limit: :infinity)
 
   # Two values with the same short description differ somewhere else, for
   # example in a checksum. Show all of them.

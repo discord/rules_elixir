@@ -66,6 +66,42 @@ defmodule DependencyAnalyser do
       arg when is_binary(arg) -> arg
     end)
 
+    case run(args) do
+      :ok -> :ok
+      {:halt, status} -> System.halt(status)
+    end
+  end
+
+  # Returns `{:halt, status}` to stop early, after the lines that explain
+  # the status are on stderr.
+  defp run(args) do
+    with {:ok, opts} <- parse_args(args),
+         {:ok, mode} <- parse_mode(Keyword.get(opts, :mode, "light")),
+         # Expand before the cd, so relative paths mean what the caller meant.
+         {:ok, seed_dirs} <- parse_seed_dirs(opts[:seed_lock_from]) do
+      File.cd!(Keyword.get(opts, :dir, "."))
+
+      Mix.start()
+      Mix.shell(Mix.Shell.Process)
+      Mix.env(:test)
+      Code.compile_file("mix.exs")
+      _project_module = Mix.Project.get!()
+      config = Mix.Project.config()
+
+      # root_dir is the monorepo root; all source.path values will be relative to it.
+      # Falls back to project dir if --root is not provided.
+      root_dir = Keyword.get(opts, :root, File.cwd!())
+
+      seed = seed_lock(seed_dirs)
+
+      case mode do
+        :light -> run_light(config, root_dir, seed)
+        :heavy -> run_heavy(config, root_dir, seed)
+      end
+    end
+  end
+
+  defp parse_args(args) do
     {opts, rest, invalid} =
       OptionParser.parse(args,
         strict: [
@@ -78,101 +114,72 @@ defmodule DependencyAnalyser do
         aliases: [d: :dir, m: :mode, r: :root, h: :help]
       )
 
-    if opts[:help] do
-      IO.write(@usage)
-      System.halt(0)
-    end
+    cond do
+      opts[:help] ->
+        IO.write(@usage)
+        {:halt, 0}
 
-    if rest != [] or invalid != [] do
-      usage_error("unexpected arguments: #{inspect(rest ++ Enum.map(invalid, &elem(&1, 0)))}")
-    end
+      rest != [] or invalid != [] ->
+        usage_error("unexpected arguments: #{inspect(rest ++ Enum.map(invalid, &elem(&1, 0)))}")
 
-    dir = Keyword.get(opts, :dir, ".")
-
-    mode =
-      case Keyword.get(opts, :mode, "light") do
-        "light" -> :light
-        "heavy" -> :heavy
-        other -> usage_error("unknown mode: #{other}")
-      end
-
-    # Expand before the cd, so relative paths mean what the caller meant.
-    seed_dirs = parse_seed_dirs(opts[:seed_lock_from])
-
-    File.cd!(dir)
-
-    Mix.start()
-    Mix.shell(Mix.Shell.Process)
-    Mix.env(:test)
-    Code.compile_file("mix.exs")
-    _project_module = Mix.Project.get!()
-    config = Mix.Project.config()
-
-    # root_dir is the monorepo root; all source.path values will be relative to it.
-    # Falls back to project dir if --root is not provided.
-    root_dir = Keyword.get(opts, :root, File.cwd!())
-
-    seed = seed_lock(seed_dirs)
-
-    case mode do
-      :light -> run_light(config, root_dir, seed)
-      :heavy -> run_heavy(config, root_dir, seed)
+      true ->
+        {:ok, opts}
     end
   end
+
+  defp parse_mode("light"), do: {:ok, :light}
+  defp parse_mode("heavy"), do: {:ok, :heavy}
+  defp parse_mode(other), do: usage_error("unknown mode: #{other}")
 
   defp usage_error(message) do
     IO.puts(:stderr, "error: #{message}\n\n#{@usage}")
-    System.halt(2)
+    {:halt, 2}
   end
 
-  defp parse_seed_dirs(nil), do: nil
+  defp parse_seed_dirs(nil), do: {:ok, nil}
 
   defp parse_seed_dirs(value) do
     dirs = value |> String.split(",", trim: true) |> Enum.map(&Path.expand/1)
+    not_mix = Enum.find(dirs, &(not File.regular?(Path.join(&1, "mix.exs"))))
 
-    if dirs == [], do: usage_error("--seed-lock-from needs at least one directory")
-
-    for dir <- dirs, not File.regular?(Path.join(dir, "mix.exs")) do
-      usage_error("--seed-lock-from: #{dir} is not a Mix project (no mix.exs)")
+    cond do
+      dirs == [] -> usage_error("--seed-lock-from needs at least one directory")
+      not_mix -> usage_error("--seed-lock-from: #{not_mix} is not a Mix project (no mix.exs)")
+      true -> {:ok, dirs}
     end
-
-    dirs
   end
-
-  # ---------------------------------------------------------------------------
-  # Lock seeding
-  # ---------------------------------------------------------------------------
 
   defp seed_lock(nil), do: nil
 
   defp seed_lock(dirs) do
     locks = SeedLock.read(dirs)
 
-    for {dir, lock} <- locks, lock == %{} do
-      IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no mix.lock entries")
-    end
+    Enum.each(locks, fn {dir, lock} ->
+      if lock == %{} do
+        IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no mix.lock entries")
+      end
+    end)
 
     {lock, conflicts} = SeedLock.merge(locks)
     Mix.Dep.Lock.write(lock)
     %{dirs: MapSet.new(dirs), lock: lock, conflicts: conflicts}
   end
 
-  defp check_converged!(nil, _deps), do: :ok
+  defp check_converged(nil, _deps), do: :ok
 
-  defp check_converged!(seed, deps) do
-    report!(SeedLock.check_converged(seed.conflicts, Enum.map(deps, & &1.app)))
+  defp check_converged(seed, deps) do
+    report(SeedLock.check_converged(seed.conflicts, Enum.map(deps, & &1.app)))
   end
 
-  defp check_fetched!(nil), do: :ok
+  defp check_fetched(nil), do: :ok
 
-  defp check_fetched!(seed) do
-    report!(SeedLock.check_fetched(seed.lock, Mix.Dep.Lock.read(), seed.conflicts))
+  defp check_fetched(seed) do
+    report(SeedLock.check_fetched(seed.lock, Mix.Dep.Lock.read(), seed.conflicts))
   end
 
-  defp report!({errors, warnings}) do
+  defp report({errors, warnings}) do
     Enum.each(warnings ++ errors, &IO.puts(:stderr, &1))
-    if errors != [], do: System.halt(1)
-    :ok
+    if errors == [], do: :ok, else: {:halt, 1}
   end
 
   defp warn_unused_seed_dirs(nil, _project_dir, _deps), do: :ok
@@ -181,11 +188,12 @@ defmodule DependencyAnalyser do
     path_dirs = for dep <- deps, path_dep?(dep), do: Path.expand(dep.opts[:dest])
     used = MapSet.new([project_dir | path_dirs])
 
-    for dir <- Enum.sort(seed.dirs), dir not in used do
+    seed.dirs
+    |> Enum.sort()
+    |> Enum.reject(&(&1 in used))
+    |> Enum.each(fn dir ->
       IO.puts(:stderr, "warning: --seed-lock-from: #{dir} is not a path dependency in the graph")
-    end
-
-    :ok
+    end)
   end
 
   # ---------------------------------------------------------------------------
@@ -195,20 +203,22 @@ defmodule DependencyAnalyser do
   defp run_light(config, root_dir, seed) do
     deps = converge_deps()
     project_dir = File.cwd!()
-    check_converged!(seed, deps)
-    warn_unused_seed_dirs(seed, project_dir, deps)
 
-    root_entry = build_root_entry(config, project_dir, root_dir)
+    with :ok <- check_converged(seed, deps) do
+      warn_unused_seed_dirs(seed, project_dir, deps)
 
-    dep_entries =
-      Enum.map(deps, fn dep ->
-        case classify_dep(dep) do
-          :path -> build_path_entry(dep, root_dir, seed)
-          type -> build_stub_entry(dep, type)
-        end
-      end)
+      root_entry = build_root_entry(config, project_dir, root_dir)
 
-    encode_and_output([root_entry | dep_entries])
+      dep_entries =
+        Enum.map(deps, fn dep ->
+          case classify_dep(dep) do
+            :path -> build_path_entry(dep, root_dir, seed)
+            type -> build_stub_entry(dep, type)
+          end
+        end)
+
+      encode_and_output([root_entry | dep_entries])
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -219,28 +229,29 @@ defmodule DependencyAnalyser do
     # Fetch deps first
     lock = Mix.Dep.Lock.read()
     _apps = Mix.Dep.Fetcher.all(%{}, lock, [])
-    check_fetched!(seed)
 
-    deps = converge_deps()
-    project_dir = File.cwd!()
-    warn_unused_seed_dirs(seed, project_dir, deps)
+    with :ok <- check_fetched(seed) do
+      deps = converge_deps()
+      project_dir = File.cwd!()
+      warn_unused_seed_dirs(seed, project_dir, deps)
 
-    root_entry = build_root_entry(config, project_dir, root_dir)
+      root_entry = build_root_entry(config, project_dir, root_dir)
 
-    dep_entries =
-      Enum.map(deps, fn dep ->
-        case classify_dep(dep) do
-          :path -> build_path_entry(dep, root_dir, seed)
-          :hex -> build_hex_entry(dep)
-          :git -> build_git_entry(dep)
-          :unknown ->
-            %Mix.Dep{app: app} = dep
-            IO.warn("unknown dep type for #{app}, treating as hex")
-            build_hex_entry(dep)
-        end
-      end)
+      dep_entries =
+        Enum.map(deps, fn dep ->
+          case classify_dep(dep) do
+            :path -> build_path_entry(dep, root_dir, seed)
+            :hex -> build_hex_entry(dep)
+            :git -> build_git_entry(dep)
+            :unknown ->
+              %Mix.Dep{app: app} = dep
+              IO.warn("unknown dep type for #{app}, treating as hex")
+              build_hex_entry(dep)
+          end
+        end)
 
-    encode_and_output([root_entry | dep_entries])
+      encode_and_output([root_entry | dep_entries])
+    end
   end
 
   # ---------------------------------------------------------------------------
