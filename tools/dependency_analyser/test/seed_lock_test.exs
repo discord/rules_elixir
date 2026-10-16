@@ -198,7 +198,9 @@ defmodule DependencyAnalyser.SeedLockTest do
       }
       """)
 
-      assert SeedLock.read([with_lock, without_lock]) == [
+      lockfiles = for dir <- [with_lock, without_lock], do: {dir, Path.join(dir, "mix.lock")}
+
+      assert SeedLock.read(lockfiles) == [
                {with_lock, %{a: hex(:a, "1.0.0")}},
                {without_lock, %{}}
              ]

@@ -122,7 +122,7 @@ defmodule DependencyAnalyserTest do
                run(tmp, ["--dir", Path.join(tmp, "meta"), "--root", tmp, "--seed-lock-from", seed])
 
       assert err ==
-               "warning: --seed-lock-from: #{stray} has no mix.lock entries\n" <>
+               "warning: --seed-lock-from: #{stray} has no lock entries (#{stray}/mix.lock)\n" <>
                  "warning: lock conflict outside the dependency graph, ignored: dev_tool " <>
                  "(seed conflict: #{link}: hex 1.0.0; #{tmp}/app_b: hex 1.1.0)\n" <>
                  "warning: --seed-lock-from: #{stray} is not a path dependency in the graph\n"
@@ -141,6 +141,20 @@ defmodule DependencyAnalyserTest do
                run(tmp, ["--dir", Path.join(tmp, "meta"), "--root", tmp, "--seed-lock-from", seed])
 
       assert entries(out)["app_a"]["role"] == "root"
+    end
+
+    # If the analyser misses app_b.lock, dev_tool is no conflict and app_b
+    # gets an empty-lock warning. If Mix compiles the mix.exs of app_b a
+    # second time, it warns that it redefines the module.
+    test "reads the lockfile that the mix.exs of a seed project sets", %{tmp: tmp} do
+      light_fixture!(tmp, lockfile: "../app_b.lock")
+      refute File.exists?(Path.join([tmp, "app_b", "mix.lock"]))
+
+      assert {0, _out, err} = analyse(tmp, "light")
+
+      assert err ==
+               "warning: lock conflict outside the dependency graph, ignored: dev_tool " <>
+                 "(seed conflict: #{tmp}/app_a: hex 1.0.0; #{tmp}/app_b: hex 1.1.0)\n"
     end
 
     test "rejects a seed directory that is not a Mix project", %{tmp: tmp} do
@@ -211,7 +225,7 @@ defmodule DependencyAnalyserTest do
   # (test-only in roots that load with env: :test), and its lock entry needs
   # transitive. dev_tool is not, because it is dev-only. app_a locks all
   # three to 1.0.0. app_b locks dev_tool to 1.1.0, and the others to the
-  # versions in `app_b`.
+  # versions in `app_b`. `app_b[:lockfile]` moves the lock of app_b.
   defp light_fixture!(tmp, app_b \\ []) do
     app_b = Keyword.merge([fake_hex: "1.0.0", transitive: "1.0.0"], app_b)
     meta!(tmp)
@@ -225,12 +239,17 @@ defmodule DependencyAnalyserTest do
     ]
     """)
 
-    project!(Path.join(tmp, "app_b"), :app_b, """
-    [
-      {:lib_c, path: "../lib_c"},
-      {:fake_hex, "~> 1.0", only: :test}
-    ]
-    """)
+    project!(
+      Path.join(tmp, "app_b"),
+      :app_b,
+      """
+      [
+        {:lib_c, path: "../lib_c"},
+        {:fake_hex, "~> 1.0", only: :test}
+      ]
+      """,
+      Keyword.take(app_b, [:lockfile])
+    )
 
     project!(Path.join(tmp, "lib_c"), :lib_c, """
     [{:lib_d, path: "../lib_d", only: :test, runtime: Mix.env() == :prod}]
@@ -246,11 +265,15 @@ defmodule DependencyAnalyserTest do
       dev_tool: hex(:dev_tool, "1.0.0")
     })
 
-    write_lock!(Path.join(tmp, "app_b"), %{
-      fake_hex: hex(:fake_hex, app_b[:fake_hex], fake_hex_deps),
-      transitive: hex(:transitive, app_b[:transitive]),
-      dev_tool: hex(:dev_tool, "1.1.0")
-    })
+    write_lock!(
+      Path.join(tmp, "app_b"),
+      %{
+        fake_hex: hex(:fake_hex, app_b[:fake_hex], fake_hex_deps),
+        transitive: hex(:transitive, app_b[:transitive]),
+        dev_tool: hex(:dev_tool, "1.1.0")
+      },
+      Keyword.get(app_b, :lockfile, "mix.lock")
+    )
   end
 
   defp heavy_fixture!(tmp, repo, tag, lock_a, lock_b) do
@@ -293,14 +316,14 @@ defmodule DependencyAnalyserTest do
     out
   end
 
-  defp project!(dir, app, deps) do
+  defp project!(dir, app, deps, opts \\ []) do
     File.mkdir_p!(dir)
 
     File.write!(Path.join(dir, "mix.exs"), """
     defmodule #{Macro.camelize(Atom.to_string(app))}.MixProject do
       use Mix.Project
 
-      def project, do: [app: #{inspect(app)}, version: "0.1.0", deps: deps()]
+      def project, do: [app: #{inspect(app)}, version: "0.1.0", deps: deps()] ++ #{inspect(opts)}
 
       defp deps do
         #{deps}
@@ -314,13 +337,13 @@ defmodule DependencyAnalyserTest do
   end
 
   # The format of Mix.Dep.Lock.write/2.
-  defp write_lock!(dir, lock) do
+  defp write_lock!(dir, lock, file \\ "mix.lock") do
     lines =
       for {app, value} <- Enum.sort(lock) do
         ~s(  "#{app}": #{inspect(value, limit: :infinity)},\n)
       end
 
-    File.write!(Path.join(dir, "mix.lock"), ["%{\n", lines, "}\n"])
+    File.write!(Path.join(dir, file), ["%{\n", lines, "}\n"])
   end
 
   defp read_lock(dir), do: Mix.Dep.Lock.read(Path.join(dir, "mix.lock"))

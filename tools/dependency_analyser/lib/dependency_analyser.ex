@@ -8,11 +8,14 @@ defmodule DependencyAnalyser do
     --root, -r        Write source.path values relative to this directory.
                       Default: the --dir project.
     --seed-lock-from  Comma-separated project directories. The analyser merges
-                      their mix.lock files and OVERWRITES the lockfile of the
+                      their lock files and OVERWRITES the lockfile of the
                       --dir project with the result before it does anything
                       else. Use this when --dir is a generated project that has
                       these projects as path dependencies, because Mix reads
-                      only the lock of the top-level project.
+                      only the lock of the top-level project. If the --dir
+                      project declares a seed project as a path dependency,
+                      the analyser reads the lockfile that its mix.exs sets.
+                      If not, it reads DIR/mix.lock.
     --help, -h        Show this text.
 
   Modes:
@@ -94,7 +97,7 @@ defmodule DependencyAnalyser do
       # Falls back to project dir if --root is not provided.
       root_dir = Keyword.get(opts, :root, File.cwd!())
 
-      seed = seed_lock(seed_dirs)
+      seed = seed_lock(seed_dirs, config)
 
       case mode do
         :light -> run_light(config, root_dir, seed)
@@ -151,25 +154,65 @@ defmodule DependencyAnalyser do
     end
   end
 
-  defp seed_lock(nil), do: nil
+  defp seed_lock(nil, _config), do: nil
 
-  defp seed_lock(dirs) do
-    locks = SeedLock.read(dirs)
+  defp seed_lock(dirs, config) do
+    declared = declared_path_deps(config)
+    lockfiles = for dir <- dirs, do: {dir, lockfile(dir, declared[real_path(dir)])}
+    locks = SeedLock.read(lockfiles)
 
-    Enum.each(locks, fn {dir, lock} ->
+    lockfiles
+    |> Enum.zip(locks)
+    |> Enum.each(fn {{dir, file}, {_dir, lock}} ->
       if lock == %{} do
-        IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no mix.lock entries")
+        IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no lock entries (#{file})")
       end
     end)
 
     {lock, conflicts} = SeedLock.merge(locks)
     Mix.Dep.Lock.write(lock)
+
     %{
       dirs: Enum.uniq(dirs),
       roots: MapSet.new(dirs, &real_path/1),
       lock: lock,
       conflicts: conflicts
     }
+  end
+
+  # %{real path => {app, env}} for each path dep that the --dir project
+  # declares, with the env that Mix loads it with.
+  defp declared_path_deps(config) do
+    for {app, opts} <- Enum.map(config[:deps] || [], &declared_opts/1),
+        is_binary(opts[:path]),
+        into: %{},
+        do: {real_path(opts[:path]), {app, Keyword.get(opts, :env, :prod)}}
+  end
+
+  defp declared_opts({app, opts}) when is_atom(app) and is_list(opts), do: {app, opts}
+  defp declared_opts({app, _req, opts}) when is_atom(app) and is_list(opts), do: {app, opts}
+  defp declared_opts(_dep), do: {nil, []}
+
+  # A seed project can keep its lock elsewhere, for example
+  # `lockfile: "../../mix.lock"` in an umbrella child, and only its mix.exs
+  # says so. Load it under the app name and env that Mix uses for the dep, as
+  # in `Mix.Dep.in_dependency/3`. Mix caches a loaded project by app name, so
+  # it reuses this one. Under another name, Mix compiles the mix.exs again
+  # and warns that it redefines the module.
+  defp lockfile(dir, nil), do: Path.join(dir, "mix.lock")
+
+  defp lockfile(dir, {app, env}) do
+    old_env = Mix.env()
+
+    try do
+      Mix.env(env)
+
+      Mix.Project.in_project(app, dir, fn _module ->
+        Path.expand(Mix.Project.config()[:lockfile])
+      end)
+    after
+      Mix.env(old_env)
+    end
   end
 
   # The caller and a mix.exs can name one directory in two ways, for example

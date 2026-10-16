@@ -1,6 +1,6 @@
 defmodule DependencyAnalyser.SeedLock do
   @moduledoc """
-  Builds one lock from the `mix.lock` files of several projects, and checks
+  Builds one lock from the lock files of several projects, and checks
   the lock that Mix resolves against it.
 
   Why is this here? Mix reads only the lock of the top-level project. A
@@ -21,13 +21,13 @@ defmodule DependencyAnalyser.SeedLock do
           {:added, atom, tuple} | {:removed, atom, tuple} | {:changed, atom, tuple, tuple}
 
   @doc """
-  Reads `mix.lock` from each project directory with Mix's own reader.
+  Reads the lockfile of each root with Mix's own reader.
 
   A missing file reads as an empty lock, the same as in Mix.
   """
-  @spec read([root]) :: [{root, lock}]
-  def read(dirs) do
-    for dir <- dirs, do: {dir, Mix.Dep.Lock.read(Path.join(dir, "mix.lock"))}
+  @spec read([{root, Path.t()}]) :: [{root, lock}]
+  def read(lockfiles) do
+    for {root, file} <- lockfiles, do: {root, Mix.Dep.Lock.read(file)}
   end
 
   @doc """
