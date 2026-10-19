@@ -199,6 +199,10 @@ defmodule DependencyAnalyser do
   # in `Mix.Dep.in_dependency/3`. Mix caches a loaded project by app name, so
   # it reuses this one. Under another name, Mix compiles the mix.exs again
   # and warns that it redefines the module.
+  #
+  # Don't use `in_dependency` itself: it pushes the parent's `:lockfile` down
+  # through `Mix.Project.deps_config/1`, so every seed project reports the
+  # lockfile of the --dir project. Checked in Mix 1.14.5, 1.15.5 and 1.18.4.
   defp lockfile(dir, nil), do: Path.join(dir, "mix.lock")
 
   defp lockfile(dir, {app, env}) do
