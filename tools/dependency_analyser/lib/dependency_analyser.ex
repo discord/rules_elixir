@@ -183,15 +183,11 @@ defmodule DependencyAnalyser do
   # %{real path => {app, env}} for each path dep that the --dir project
   # declares, with the env that Mix loads it with.
   defp declared_path_deps(config) do
-    for {app, opts} <- Enum.map(config[:deps] || [], &declared_opts/1),
+    for {app, opts} <- declared_deps(config),
         is_binary(opts[:path]),
         into: %{},
-        do: {real_path(opts[:path]), {app, Keyword.get(opts, :env, :prod)}}
+        do: {real_path(opts[:path]), {app, opts[:env] || :prod}}
   end
-
-  defp declared_opts({app, opts}) when is_atom(app) and is_list(opts), do: {app, opts}
-  defp declared_opts({app, _req, opts}) when is_atom(app) and is_list(opts), do: {app, opts}
-  defp declared_opts(_dep), do: {nil, []}
 
   # A seed project can keep its lock elsewhere, for example
   # `lockfile: "../../mix.lock"` in an umbrella child, and only its mix.exs
@@ -322,22 +318,12 @@ defmodule DependencyAnalyser do
 
   defp build_root_entry(config, project_dir, root_dir) do
     app_name = Atom.to_string(config[:app])
-
-    raw_deps = config[:deps] || []
-
-    immediate_deps =
-      raw_deps
-      |> Enum.map(fn
-        {name, _} when is_atom(name) -> Atom.to_string(name)
-        {name, _, _} when is_atom(name) -> Atom.to_string(name)
-        _ -> nil
-      end)
-      |> Enum.reject(&is_nil/1)
+    declared = declared_deps(config)
 
     %{
       app_name: app_name,
-      deps: immediate_deps,
-      dep_details: dep_details(raw_deps),
+      deps: Enum.map(declared, fn {app, _opts} -> Atom.to_string(app) end),
+      dep_details: dep_details(declared),
       role: "project",
       source: %{type: "path", path: Path.relative_to(project_dir, root_dir)},
       files: scan_files(app_name, project_dir)
@@ -499,14 +485,21 @@ defmodule DependencyAnalyser do
   # Dep detail extraction (only:, env:, runtime: from mix.exs dep opts)
   # ---------------------------------------------------------------------------
 
-  defp dep_details(raw_deps) do
-    Enum.flat_map(raw_deps, fn
-      # `{:app, path: ..., only: :test}`: options, no requirement.
-      {name, opts} when is_atom(name) and is_list(opts) -> [extract_dep_detail(name, opts)]
-      {name, _req} when is_atom(name) -> [%{name: Atom.to_string(name)}]
-      {name, _req, opts} when is_atom(name) -> [extract_dep_detail(name, opts)]
+  # `{app, opts}` for each dep in the project's `:deps`, in the shapes that
+  # `with_scm_and_app` in `Mix.Dep.Loader` accepts. Every reader of `:deps`
+  # goes through here, because a 2-tuple can hold options with no
+  # requirement: `{:app, path: "...", only: :test}`.
+  defp declared_deps(config) do
+    Enum.flat_map(config[:deps] || [], fn
+      {app, opts} when is_atom(app) and is_list(opts) -> [{app, opts}]
+      {app, _req} when is_atom(app) -> [{app, []}]
+      {app, _req, opts} when is_atom(app) and is_list(opts) -> [{app, opts}]
       _ -> []
     end)
+  end
+
+  defp dep_details(declared) do
+    Enum.map(declared, fn {app, opts} -> extract_dep_detail(app, opts) end)
   end
 
   # The converged opts of a dep merge what every parent declared, so they
@@ -515,7 +508,9 @@ defmodule DependencyAnalyser do
   # `runtime: Mix.env() != :test` only have a value after evaluation.
   defp path_dep_details(%Mix.Dep{opts: opts} = dep) do
     if Mix.Dep.mix?(dep) and File.regular?(Path.join(opts[:dest], "mix.exs")) do
-      Mix.Dep.in_dependency(dep, fn _module -> dep_details(Mix.Project.config()[:deps] || []) end)
+      Mix.Dep.in_dependency(dep, fn _module ->
+        dep_details(declared_deps(Mix.Project.config()))
+      end)
     else
       []
     end
@@ -543,7 +538,6 @@ defmodule DependencyAnalyser do
       _ -> detail
     end
   end
-  defp extract_dep_detail(dep_name, _opts), do: %{name: Atom.to_string(dep_name)}
 
   # ---------------------------------------------------------------------------
   # File scanning
