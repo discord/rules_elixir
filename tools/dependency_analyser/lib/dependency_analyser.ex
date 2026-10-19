@@ -137,9 +137,14 @@ defmodule DependencyAnalyser do
   defp parse_mode(other), do: usage_error("unknown mode: #{other}")
 
   defp usage_error(message) do
-    IO.puts(:stderr, "error: #{message}\n\n#{@usage}")
+    print_error("#{message}\n\n#{@usage}")
     {:halt, 2}
   end
+
+  defp print_error(message), do: IO.puts(:stderr, "error: " <> message)
+
+  # Not IO.warn/1: it adds a stacktrace, and @usage promises one line each.
+  defp print_warning(message), do: IO.puts(:stderr, "warning: " <> message)
 
   defp parse_seed_dirs(nil), do: {:ok, nil}
 
@@ -165,7 +170,7 @@ defmodule DependencyAnalyser do
         lock = Mix.Dep.Lock.read(file)
 
         if lock == %{} do
-          IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no lock entries (#{file})")
+          print_warning("--seed-lock-from: #{dir} has no lock entries (#{file})")
         end
 
         {dir, lock}
@@ -239,7 +244,8 @@ defmodule DependencyAnalyser do
   end
 
   defp report({errors, warnings}) do
-    Enum.each(warnings ++ errors, &IO.puts(:stderr, &1))
+    Enum.each(warnings, &print_warning/1)
+    Enum.each(errors, &print_error/1)
     if errors == [], do: :ok, else: {:halt, 1}
   end
 
@@ -252,7 +258,7 @@ defmodule DependencyAnalyser do
     seed.dirs
     |> Enum.reject(&(real_path(&1) in used))
     |> Enum.each(fn dir ->
-      IO.puts(:stderr, "warning: --seed-lock-from: #{dir} is not a path dependency in the graph")
+      print_warning("--seed-lock-from: #{dir} is not a path dependency in the graph")
     end)
   end
 
@@ -305,7 +311,7 @@ defmodule DependencyAnalyser do
             :git -> build_git_entry(dep)
             :unknown ->
               %Mix.Dep{app: app} = dep
-              IO.warn("unknown dep type for #{app}, treating as hex")
+              print_warning("unknown dep type for #{app}, treating as hex")
               build_hex_entry(dep)
           end
         end)

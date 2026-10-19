@@ -85,7 +85,7 @@ defmodule DependencyAnalyser.SeedLockTest do
       assert {[], [warning]} = SeedLock.check_fetched(seed, seed, conflicts)
 
       assert warning ==
-               "warning: lock conflict outside the dependency graph, ignored: dev_only " <>
+               "lock conflict outside the dependency graph, ignored: dev_only " <>
                  "(seed conflict: /a: hex 1.0.0; /b: hex 1.1.0)"
     end
 
@@ -96,10 +96,10 @@ defmodule DependencyAnalyser.SeedLockTest do
       assert {[error, summary], []} = SeedLock.check_fetched(%{}, fetched, conflicts)
 
       assert error ==
-               "error: lock entry added by the fetch: split hex 1.1.0 " <>
+               "lock entry added by the fetch: split hex 1.1.0 " <>
                  "(seed conflict: /a: hex 1.0.0; /b: hex 1.1.0)"
 
-      assert summary =~ ~r/^error: 1 lock entry differs from the seed; align/
+      assert summary =~ ~r/^1 lock entry differs from the seed; align/
     end
 
     test "fails on an entry that the fetch resolves again" do
@@ -108,7 +108,7 @@ defmodule DependencyAnalyser.SeedLockTest do
       assert {[error, _summary], []} =
                SeedLock.check_fetched(seed, %{a: hex(:a, "1.2.0")}, %{})
 
-      assert error == "error: lock entry changed by the fetch: a hex 1.0.0 -> hex 1.2.0"
+      assert error == "lock entry changed by the fetch: a hex 1.0.0 -> hex 1.2.0"
     end
 
     test "shows full values when the short descriptions are the same" do
@@ -124,7 +124,7 @@ defmodule DependencyAnalyser.SeedLockTest do
     test "fails on an entry that the fetch removes" do
       seed = %{a: hex(:a, "1.0.0")}
       assert {[error, _summary], []} = SeedLock.check_fetched(seed, %{}, %{})
-      assert error == "error: lock entry removed by the fetch: a hex 1.0.0"
+      assert error == "lock entry removed by the fetch: a hex 1.0.0"
     end
   end
 
@@ -136,11 +136,11 @@ defmodule DependencyAnalyser.SeedLockTest do
                SeedLock.check_converged(%{}, [:in_graph, :other], conflicts)
 
       assert error ==
-               "error: lock conflict in the dependency graph: in_graph " <>
+               "lock conflict in the dependency graph: in_graph " <>
                  "(seed conflict: /a: hex 1.0.0; /b: hex 1.1.0)"
 
       assert warning =~
-               ~r/^warning: lock conflict outside the dependency graph, ignored: outside /
+               ~r/^lock conflict outside the dependency graph, ignored: outside /
     end
 
     # Without a fetch, the converged graph has only the packages on disk. A
@@ -154,7 +154,7 @@ defmodule DependencyAnalyser.SeedLockTest do
       conflicts = %{deep: split(:deep), optional_dep: split(:optional_dep)}
 
       assert {[error, _summary], [warning]} = SeedLock.check_converged(seed, [:top], conflicts)
-      assert error =~ ~r/^error: lock conflict in the dependency graph: deep /
+      assert error =~ ~r/^lock conflict in the dependency graph: deep /
       assert warning =~ ~r/ignored: optional_dep /
     end
 
@@ -165,8 +165,8 @@ defmodule DependencyAnalyser.SeedLockTest do
       }
 
       assert {[child, top, _summary], []} = SeedLock.check_converged(%{}, [:top], conflicts)
-      assert child =~ ~r/^error: lock conflict in the dependency graph: child /
-      assert top =~ ~r/^error: lock conflict in the dependency graph: top /
+      assert child =~ ~r/^lock conflict in the dependency graph: child /
+      assert top =~ ~r/^lock conflict in the dependency graph: top /
     end
   end
 

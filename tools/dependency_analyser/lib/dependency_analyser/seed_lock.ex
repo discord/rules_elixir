@@ -68,22 +68,23 @@ defmodule DependencyAnalyser.SeedLock do
   conflicting key that is still absent after the fetch is outside the graph,
   and only gets a warning.
 
-  Returns `{errors, warnings}` as lines for stderr.
+  Returns `{errors, warnings}`, one line each, without the `error: ` or
+  `warning: ` prefix.
   """
   @spec check_fetched(lock, lock, conflicts) :: {[String.t()], [String.t()]}
   def check_fetched(seed, fetched, conflicts) do
     errors =
       Enum.map(diff(seed, fetched), fn
         {:added, key, new} ->
-          "error: lock entry added by the fetch: #{key} #{describe(new)}" <>
+          "lock entry added by the fetch: #{key} #{describe(new)}" <>
             conflict_suffix(conflicts, key)
 
         {:removed, key, old} ->
-          "error: lock entry removed by the fetch: #{key} #{describe(old)}"
+          "lock entry removed by the fetch: #{key} #{describe(old)}"
 
         {:changed, key, old, new} ->
           {old, new} = describe_pair(old, new)
-          "error: lock entry changed by the fetch: #{key} #{old} -> #{new}"
+          "lock entry changed by the fetch: #{key} #{old} -> #{new}"
       end)
 
     {summarise(errors, "lock entry differs from the seed", "lock entries differ from the seed"),
@@ -100,7 +101,8 @@ defmodule DependencyAnalyser.SeedLock do
   It skips an optional dep, because Mix includes one only when another
   package requires it.
 
-  Returns `{errors, warnings}` as lines for stderr.
+  Returns `{errors, warnings}`, one line each, without the `error: ` or
+  `warning: ` prefix.
   """
   @spec check_converged(lock, Enumerable.t(), conflicts) :: {[String.t()], [String.t()]}
   def check_converged(seed, apps, conflicts) do
@@ -108,7 +110,7 @@ defmodule DependencyAnalyser.SeedLock do
 
     errors =
       for {key, _} <- Enum.sort(conflicts), key in apps do
-        "error: lock conflict in the dependency graph: #{key}" <> conflict_suffix(conflicts, key)
+        "lock conflict in the dependency graph: #{key}" <> conflict_suffix(conflicts, key)
       end
 
     {summarise(errors, "lock conflict in the graph", "lock conflicts in the graph"),
@@ -175,7 +177,7 @@ defmodule DependencyAnalyser.SeedLock do
 
   defp outside_graph(conflicts, outside?) do
     for {key, _} <- Enum.sort(conflicts), outside?.(key) do
-      "warning: lock conflict outside the dependency graph, ignored: #{key}" <>
+      "lock conflict outside the dependency graph, ignored: #{key}" <>
         conflict_suffix(conflicts, key)
     end
   end
@@ -184,6 +186,6 @@ defmodule DependencyAnalyser.SeedLock do
 
   defp summarise(errors, one, many) do
     what = if length(errors) == 1, do: one, else: many
-    errors ++ ["error: #{length(errors)} #{what}; align the mix.lock files of the seed projects"]
+    errors ++ ["#{length(errors)} #{what}; align the mix.lock files of the seed projects"]
   end
 end
