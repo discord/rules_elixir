@@ -130,6 +130,22 @@ defmodule DependencyAnalyserTest do
       assert entries(out)["app_a"]["role"] == "root"
     end
 
+    # A dir that is read twice agrees with itself, so only the conflict
+    # lines show the duplicate.
+    test "reads a seed directory once when the caller names it twice", %{tmp: tmp} do
+      light_fixture!(tmp)
+      link = Path.join(tmp, "link_to_app_a")
+      File.ln_s!(Path.join(tmp, "app_a"), link)
+      seed = Enum.join([link, Path.join(tmp, "app_a"), Path.join(tmp, "app_b")], ",")
+
+      assert {0, _out, err} =
+               run(tmp, ["--dir", Path.join(tmp, "meta"), "--root", tmp, "--seed-lock-from", seed])
+
+      assert err ==
+               "warning: lock conflict outside the dependency graph, ignored: dev_tool " <>
+                 "(seed conflict: #{link}: hex 1.0.0; #{tmp}/app_b: hex 1.1.0)\n"
+    end
+
     # The analyser expands a seed path before it changes into --dir.
     test "reads a relative seed directory from the directory it starts in", %{tmp: tmp} do
       light_fixture!(tmp)

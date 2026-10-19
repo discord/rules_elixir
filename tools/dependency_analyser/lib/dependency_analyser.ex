@@ -149,7 +149,12 @@ defmodule DependencyAnalyser do
   defp parse_seed_dirs(nil), do: {:ok, nil}
 
   defp parse_seed_dirs(value) do
-    dirs = value |> String.split(",", trim: true) |> Enum.map(&Path.expand/1)
+    dirs =
+      value
+      |> String.split(",", trim: true)
+      |> Enum.map(&Path.expand/1)
+      |> Enum.uniq_by(&real_path/1)
+
     not_mix = Enum.find(dirs, &(not File.regular?(Path.join(&1, "mix.exs"))))
 
     cond do
@@ -180,7 +185,7 @@ defmodule DependencyAnalyser do
     Mix.Dep.Lock.write(lock)
 
     %{
-      dirs: Enum.uniq(dirs),
+      dirs: dirs,
       roots: MapSet.new(dirs, &real_path/1),
       lock: lock,
       conflicts: conflicts
