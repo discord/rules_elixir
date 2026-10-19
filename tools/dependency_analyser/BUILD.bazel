@@ -1,6 +1,6 @@
 # NOTE: this rule specifically *does not* use mix, allowing us to use it to
 # bootstrap rules_elixir
-load("@rules_elixir//:defs.bzl", "elixir_app")
+load("@rules_elixir//:defs.bzl", "elixir_app", "ex_unit_test")
 load("@rules_erlang//:escript.bzl", "escript_archive", "escript_wrapper")
 
 package(default_visibility = [ "//visibility:public"])
@@ -8,6 +8,7 @@ package(default_visibility = [ "//visibility:public"])
 elixir_app(
     srcs = [
         "lib/dependency_analyser.ex",
+        "lib/dependency_analyser/cargo_toml.ex",
     ],
     app_name = "dependency_analyser",
     deps = [
@@ -37,3 +38,12 @@ escript_wrapper(
     out = "dependency_analyser",
 )
 
+ex_unit_test(
+    name = "cargo_toml_test",
+    srcs = ["test/cargo_toml_test.exs"],
+    data = ["lib/dependency_analyser/cargo_toml.ex"],
+    env = {
+        "ERL_COMPILER_OPTIONS": "deterministic",
+        "ELIXIR_ERL_OPTIONS": "+fnu",
+    },
+)
