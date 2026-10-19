@@ -181,29 +181,4 @@ defmodule DependencyAnalyser.SeedLockTest do
                "git https://example.com/a.git abc123"
     end
   end
-
-  describe "read/1" do
-    @tag :tmp_dir
-    test "reads quoted keys the way Mix writes them, and a missing lock as empty", %{
-      tmp_dir: tmp_dir
-    } do
-      with_lock = Path.join(tmp_dir, "with_lock")
-      without_lock = Path.join(tmp_dir, "without_lock")
-      File.mkdir_p!(with_lock)
-      File.mkdir_p!(without_lock)
-
-      File.write!(Path.join(with_lock, "mix.lock"), """
-      %{
-        "a": #{inspect(hex(:a, "1.0.0"))},
-      }
-      """)
-
-      lockfiles = for dir <- [with_lock, without_lock], do: {dir, Path.join(dir, "mix.lock")}
-
-      assert SeedLock.read(lockfiles) == [
-               {with_lock, %{a: hex(:a, "1.0.0")}},
-               {without_lock, %{}}
-             ]
-    end
-  end
 end

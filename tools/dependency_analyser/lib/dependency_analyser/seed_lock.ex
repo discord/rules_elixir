@@ -10,8 +10,8 @@ defmodule DependencyAnalyser.SeedLock do
   with the merged locks fixes that, and the checks below catch the cases
   where the seed is not enough.
 
-  Everything except `read/1` is pure, so it can be tested without Mix
-  projects or the network.
+  The caller reads the lock files, so everything here is pure and can be
+  tested without Mix projects or the network.
   """
 
   @type root :: String.t()
@@ -19,16 +19,6 @@ defmodule DependencyAnalyser.SeedLock do
   @type conflicts :: %{optional(atom) => [{root, tuple}]}
   @type change ::
           {:added, atom, tuple} | {:removed, atom, tuple} | {:changed, atom, tuple, tuple}
-
-  @doc """
-  Reads the lockfile of each root with Mix's own reader.
-
-  A missing file reads as an empty lock, the same as in Mix.
-  """
-  @spec read([{root, Path.t()}]) :: [{root, lock}]
-  def read(lockfiles) do
-    for {root, file} <- lockfiles, do: {root, Mix.Dep.Lock.read(file)}
-  end
 
   @doc """
   Merges the locks of several roots.

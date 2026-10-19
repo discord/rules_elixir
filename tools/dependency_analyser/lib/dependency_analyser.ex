@@ -158,16 +158,18 @@ defmodule DependencyAnalyser do
 
   defp seed_lock(dirs, config) do
     declared = declared_path_deps(config)
-    lockfiles = for dir <- dirs, do: {dir, lockfile(dir, declared[real_path(dir)])}
-    locks = SeedLock.read(lockfiles)
 
-    lockfiles
-    |> Enum.zip(locks)
-    |> Enum.each(fn {{dir, file}, {_dir, lock}} ->
-      if lock == %{} do
-        IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no lock entries (#{file})")
+    locks =
+      for dir <- dirs do
+        file = lockfile(dir, declared[real_path(dir)])
+        lock = Mix.Dep.Lock.read(file)
+
+        if lock == %{} do
+          IO.puts(:stderr, "warning: --seed-lock-from: #{dir} has no lock entries (#{file})")
+        end
+
+        {dir, lock}
       end
-    end)
 
     {lock, conflicts} = SeedLock.merge(locks)
     Mix.Dep.Lock.write(lock)
