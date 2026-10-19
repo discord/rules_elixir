@@ -344,7 +344,8 @@ defmodule DependencyAnalyser do
       has_app_src: app_src_path != nil,
       app_src_path: app_src_path,
       has_mix_exs: File.exists?(Path.join(path, "mix.exs")),
-      has_test_files: has_test_files
+      has_test_files: has_test_files,
+      native_crates: DependencyAnalyser.CargoToml.native_crates(path)
     }
   end
 
